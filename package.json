@@ -10,5 +10,8 @@
     "js-yaml": "^4.1.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "^0.63.2"
   }
 }
