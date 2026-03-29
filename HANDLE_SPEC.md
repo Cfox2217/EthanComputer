@@ -295,13 +295,13 @@ Artifact Header 的作用只有一个：
 ## 7.2 MVP 推荐最小结构
 
 ```yaml
-artifact_id: artifact.dev.task.breakdown.ethan
+artifact_id: artifact-dev-task-breakdown-ethan
 header:
   title: Ethan task breakdown
   when_to_use:
     - 把需求拆成开发任务
     - 输出实现计划
-  derived_from: dev.task.breakdown
+  derived_from: dev-task-breakdown
   escalate_when:
     - 当前请求涉及未定义协议
     - 当前请求跨越不清晰模块边界
@@ -327,13 +327,13 @@ Artifact Body 应表达：
 ## 8.1 MVP 推荐最小结构
 
 ```yaml
-artifact_id: artifact.dev.task.breakdown.ethan
+artifact_id: artifact-dev-task-breakdown-ethan
 header:
   title: Ethan task breakdown
   when_to_use:
     - 把需求拆成开发任务
     - 输出实现计划
-  derived_from: dev.task.breakdown
+  derived_from: dev-task-breakdown
   escalate_when:
     - 当前请求涉及未定义协议
     - 当前请求跨越不清晰模块边界
@@ -368,7 +368,7 @@ MVP 中 Skill 不需要做得很复杂，但必须表达清楚：
 ## 9.1 MVP 推荐最小结构
 
 ```yaml
-skill_id: dev.task.breakdown
+skill_id: dev-task-breakdown
 version: 0.1.0
 title: Break request into engineering tasks
 description: 把自然语言需求拆成工程任务
@@ -635,15 +635,30 @@ SKILL.md 格式结构：
 
 ```text
 ---
-name: <id>
-description: <一句话描述>
-<其他元字段>
+name: <小写-连字符-id>
+description: <功能描述 + 适用场景>
+metadata:
+  version: "<语义化版本>"
 ---
 
 # <标题>
 
-<Markdown 正文：场景、约束、执行步骤等>
+## Scenarios
+- <场景说明>
+
+## Constraints
+- <约束条件>
+
+## Method
+1. <执行步骤>
 ```
+
+Frontmatter 规范（遵循 Agent Skills Standard）：
+
+- **`name`**（必填）：小写字母、数字、连字符，最多 64 字符，与目录名一致
+- **`description`**（必填）：描述功能和适用场景，最多 1024 字符
+- **`metadata`**（可选）：扩展信息，如 `version`、`derived_from` 等
+- 禁止在 frontmatter 顶层使用非标准字段（如 `scenarios`、`constraints` 应放 body）
 
 理由：
 
@@ -706,32 +721,34 @@ MVP 建议使用 TypeScript 或 Python，
 
 ## 15.1 Skill（最小）
 
-文件：`skills/local/dev.task.breakdown/SKILL.md`
+文件：`skills/local/dev-task-breakdown/SKILL.md`
+
+遵循标准 SKILL.md 格式：frontmatter 只含标准字段（`name` + `description`），扩展信息放 `metadata` 或 body。
 
 ```markdown
 ---
-name: dev.task.breakdown
-version: 0.1.0
-description: 把自然语言需求拆成工程任务
-scenarios:
-  - feature-breakdown
-constraints:
-  - 不发明未存在边界
+name: dev-task-breakdown
+description: 把自然语言需求拆成工程任务。适用于将功能需求或架构调整方向拆解为可执行工程步骤的场景。
+metadata:
+  version: "0.1.0"
 ---
 
 # Break request into engineering tasks
 
 把自然语言形式的需求拆解为可执行的工程任务列表。
 
-## 适用场景
+## Scenarios
 
 - **feature-breakdown**: 用户给出功能需求，需要拆成开发任务
+- **architecture-breakdown**: 用户给出架构调整方向，需要拆成工程步骤
 
-## 约束
+## Constraints
 
 - 不发明未存在的系统边界
+- 不假设未定义的协议
+- 任务粒度控制在 1~3 天
 
-## 方法
+## Method
 
 1. 识别用户请求中的目标
 2. 识别影响边界
@@ -741,13 +758,17 @@ constraints:
 
 ## 15.2 Artifact（最小）
 
-文件：`artifacts/ethan/artifact.dev.task.breakdown.ethan.md`
+文件：`artifacts/ethan/artifact-dev-task-breakdown-ethan.md`
+
+同样遵循 SKILL.md 格式：frontmatter 只含标准字段，`derived_from` 放 `metadata`。
 
 ```markdown
 ---
-name: artifact.dev.task.breakdown.ethan
-derived_from: dev.task.breakdown
-description: Ethan 专属的任务拆解执行面
+name: artifact-dev-task-breakdown-ethan
+description: Ethan 专属的任务拆解执行面。当需要把需求拆成开发任务或输出实现计划时使用。
+metadata:
+  derived_from: dev-task-breakdown
+  version: "0.1.0"
 ---
 
 # Ethan task breakdown
@@ -780,7 +801,7 @@ description: Ethan 专属的任务拆解执行面
 
 ```yaml
 request: 把这个需求拆成开发任务
-current_artifact: artifact.dev.task.breakdown.ethan
+current_artifact: artifact-dev-task-breakdown-ethan
 why_not_enough: 这次请求涉及新的核心协议
 known_facts:
   current_project: Ethan Computer
@@ -789,8 +810,8 @@ known_facts:
 ## 15.4 Craft Result（最小）
 
 ```yaml
-skill_used: dev.task.breakdown
-new_artifact: artifact.dev.task.breakdown.ethan
+skill_used: dev-task-breakdown
+new_artifact: artifact-dev-task-breakdown-ethan
 summary:
   - 新增一个可处理协议缺口的场景
 resume_hint: 可以继续执行
@@ -801,7 +822,7 @@ resume_hint: 可以继续执行
 ```yaml
 run_id: run_0001
 request: 把这个需求拆成开发任务
-used_artifact: artifact.dev.task.breakdown.ethan
+used_artifact: artifact-dev-task-breakdown-ethan
 escalated: true
 craft_applied: true
 result: success
@@ -1122,7 +1143,7 @@ TUI 的信息展示应遵守以下原则：
 │ Visible Artifact Headers                                     │
 │ 1. Ethan task breakdown                                      │
 │    - when_to_use: 把需求拆成开发任务 / 输出实现计划               │
-│    - derived_from: dev.task.breakdown                        │
+│    - derived_from: dev-task-breakdown                        │
 │ 2. ...                                                       │
 ├──────────────────────────────────────────────────────────────┤
 │ L0 Decision                                                  │
@@ -1132,7 +1153,7 @@ TUI 的信息展示应遵守以下原则：
 │ escalated: yes                                               │
 ├──────────────────────────────────────────────────────────────┤
 │ L1 Craft                                                     │
-│ skill: dev.task.breakdown                                    │
+│ skill: dev-task-breakdown                                    │
 │ action: extend artifact                                      │
 │ changes: added protocol-gap scenario                         │
 │ resume_hint: ready                                           │

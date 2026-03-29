@@ -3,6 +3,9 @@
  *
  * 从 skills/local/ 目录扫描 SKILL.md 格式文件，
  * 解析 YAML frontmatter + Markdown body，映射为 Skill 类型。
+ *
+ * 标准 SKILL.md frontmatter 只有 name + description。
+ * version/scenarios/constraints 从 metadata 或 body 中提取。
  */
 import type { Skill } from "@ethan-computer/protocol-types";
 export interface SkillRegistry {

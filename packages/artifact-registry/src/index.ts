@@ -38,10 +38,12 @@ function toHeader(data: Record<string, unknown>, body: string): ArtifactHeader {
   const titleMatch = body.match(/^#\s+(.+)$/m);
   const title = titleMatch ? titleMatch[1].trim() : String(data.name ?? "");
 
+  const metadata = (data.metadata ?? {}) as Record<string, unknown>;
+
   return {
     title,
     when_to_use: extractListSection(body, "When to use"),
-    derived_from: String(data.derived_from ?? ""),
+    derived_from: String(metadata.derived_from ?? data.derived_from ?? ""),
     escalate_when: extractListSection(body, "Escalate when"),
   };
 }
@@ -183,8 +185,11 @@ export function createArtifactRegistry(artifactsDir: string): ArtifactRegistry {
 
       const frontmatter: Record<string, unknown> = {
         name: artifact.artifact_id,
-        derived_from: artifact.header.derived_from,
         description: artifact.header.title,
+        metadata: {
+          derived_from: artifact.header.derived_from,
+          version: "0.1.0",
+        },
       };
 
       let body = `# ${artifact.header.title}\n\n`;

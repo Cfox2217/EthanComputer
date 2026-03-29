@@ -3,6 +3,9 @@
  *
  * 从 skills/local/ 目录扫描 SKILL.md 格式文件，
  * 解析 YAML frontmatter + Markdown body，映射为 Skill 类型。
+ *
+ * 标准 SKILL.md frontmatter 只有 name + description。
+ * version/scenarios/constraints 从 metadata 或 body 中提取。
  */
 
 import { readdir, readFile } from "node:fs/promises";
@@ -24,23 +27,45 @@ function parseFrontmatter(raw: string): {
   return { data, body };
 }
 
+/** 从 body 中提取指定 ## 段落下的列表项 */
+function extractListSection(body: string, heading: string): string[] {
+  const lines = body.split("\n");
+  const items: string[] = [];
+  let inSection = false;
+
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      inSection = line.includes(heading);
+      continue;
+    }
+    if (inSection) {
+      const match = line.match(/^[-*]\s+(.+)$/);
+      if (match) {
+        // 去掉 bold 标记：**key**: value → key: value
+        const cleaned = match[1]
+          .replace(/\*\*/g, "")
+          .trim();
+        items.push(cleaned);
+      }
+    }
+  }
+  return items;
+}
+
 /** 从 frontmatter + body 映射为 Skill 接口 */
 function toSkill(data: Record<string, unknown>, body: string): Skill {
-  // 从 markdown body 提取第一个 # 标题作为 title
   const titleMatch = body.match(/^#\s+(.+)$/m);
   const title = titleMatch ? titleMatch[1].trim() : String(data.name ?? "");
 
+  const metadata = (data.metadata ?? {}) as Record<string, unknown>;
+
   return {
     skill_id: String(data.name ?? ""),
-    version: String(data.version ?? "0.0.0"),
+    version: String(metadata.version ?? data.version ?? "0.0.0"),
     title,
     description: String(data.description ?? ""),
-    scenarios: Array.isArray(data.scenarios)
-      ? data.scenarios.map(String)
-      : [],
-    constraints: Array.isArray(data.constraints)
-      ? data.constraints.map(String)
-      : [],
+    scenarios: extractListSection(body, "Scenarios"),
+    constraints: extractListSection(body, "Constraints"),
   };
 }
 
@@ -60,7 +85,6 @@ export function createSkillRegistry(skillsDir: string): SkillRegistry {
       const skillIds: string[] = [];
       for (const entry of entries) {
         if (entry.isDirectory()) {
-          // 检查目录下是否有 SKILL.md
           try {
             await readFile(join(skillsDir, entry.name, "SKILL.md"));
             skillIds.push(entry.name);

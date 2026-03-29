@@ -1,30 +1,26 @@
 ---
-name: dev.task.breakdown
-version: 0.1.0
-description: 把自然语言需求拆成工程任务
-scenarios:
-  - feature-breakdown
-  - architecture-breakdown
-constraints:
-  - 不发明未存在边界
+name: dev-task-breakdown
+description: 把自然语言需求拆成工程任务。适用于将功能需求或架构调整方向拆解为可执行工程步骤的场景。
+metadata:
+  version: "0.1.0"
 ---
 
 # Break request into engineering tasks
 
 把自然语言形式的需求拆解为可执行的工程任务列表。
 
-## 适用场景
+## Scenarios
 
 - **feature-breakdown**: 用户给出一个功能需求，需要拆成开发任务
 - **architecture-breakdown**: 用户给出架构调整方向，需要拆成工程步骤
 
-## 约束
+## Constraints
 
 - 不发明未存在的系统边界
 - 不假设未定义的协议
 - 任务粒度控制在 1~3 天
 
-## 方法
+## Method
 
 1. 识别用户请求中的目标
 2. 识别影响边界（哪些模块、哪些协议）

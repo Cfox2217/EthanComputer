@@ -1,7 +1,9 @@
 ---
-name: artifact.dev.task.breakdown.ethan
-derived_from: dev.task.breakdown
-description: Ethan 专属的任务拆解执行面
+name: artifact-dev-task-breakdown-ethan
+description: Ethan 专属的任务拆解执行面。当需要把需求拆成开发任务或输出实现计划时使用。
+metadata:
+  derived_from: dev-task-breakdown
+  version: "0.1.0"
 ---
 
 # Ethan task breakdown
