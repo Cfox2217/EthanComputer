@@ -1,0 +1,10 @@
+{
+  "name": "@ethan-computer/skill-registry",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@ethan-computer/protocol-types": "*"
+  }
+}
