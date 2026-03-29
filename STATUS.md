@@ -3,8 +3,8 @@
 > 每次完成实际任务后都要更新。
 
 ## Current
-- **Current Focus**: Phase 3 — L1 Crafting (craft-engine)
-- **Last Updated**: 2026-03-29 22:30 GMT+08:00
+- **Current Focus**: Phase 3 — L1 Crafting（Step 4 已完成含优化，下一步 Step 5）
+- **Last Updated**: 2026-03-30 01:30 GMT+08:00
 - **Blockers**: none
 
 ## 开发路线（参考 CraftAgent 双内核架构）
@@ -25,15 +25,22 @@
   - Pi subprocess 接口预留（后续接入 @mariozechner/pi-coding-agent）
 - [x] Step 3b: enter-runtime 重写
   - 删除关键词匹配，改为 LLM 自行决策
-  - 注入所有 Artifact Headers 到 system prompt（title, when_to_use, escalate_when）
-  - LLM 输出结构化 JSON：`{"action":"execute","artifact_id":"...","execution_plan":"..."}`
+  - 注入所有 Artifact Headers 到 system prompt
+  - LLM 输出结构化 JSON：execute / escalate
   - RunRecord 写入 runs/logs/
 - [x] 端到端验证通过（scripts/debug-api.ts）
-  - "帮我把这个需求拆成开发任务" → execute + 命中 artifact
-  - "帮我写一个数据库迁移脚本" → escalate
 
 ### Phase 3：L1 Crafting
-- [ ] Step 4: 创建 craft-engine 包（接收 Upgrade → 回溯 Skill → 生成 Artifact）
+- [x] Step 4: 创建 craft-engine 包
+  - CraftEngine 接口：CraftRequest → CraftOutput（report + artifact_path）
+  - Agentic loop：基于 Anthropic SDK tool use
+  - 工具集：read_file, edit_file（定点修改）, write_file（新建）
+  - L1 系统提示词：极简流程化设计（角色 → 输入 → 目标 → 工具 → 工作顺序 → 产出格式 → 禁止项）
+  - 已有 artifact 内容预注入 user message（省去 read_file 轮次）
+  - Skill headers + 目标 Skill 全文注入 system prompt
+  - Craft 报告结构化格式：Action / What was added / How L0 should continue / Open boundaries
+  - 性能优化：修改场景从 ~106s 降到 ~45s
+  - 验证通过（verify-craft.ts）
 - [ ] Step 5: L0 恢复执行（L1 返回后继续）
 
 ### Phase 4：TUI
@@ -49,6 +56,9 @@
 
 ## Tech Debt
 - GUI 后期直接借鉴 Reference/craft-agents-oss-main 前端
+- craft-engine: 无对应 Skill 场景当前未处理（agent 自行决策），后续需评估是否需要显式 fallback
+- craft-engine: agentic loop 无 token 用量统计，后续需加
+- craft-engine: 新建场景 write_file 仍需输出完整文件，速度受限于模型生成时间
 
 ## 参考项目
 - **一等参考**: `Reference/craft-agents-oss-main/`（双内核 Pi + Claude Agent SDK）
@@ -56,21 +66,29 @@
 
 ## Log
 
+### [2026-03-30 01:30 GMT+08:00] Step 4 优化：L1 系统提示词重构 + edit_file + 性能提升
+- **Why**: L1 响应过慢（修改场景 ~106s），系统提示词目的导向不够明确
+- **Changed**:
+  - L1 系统提示词重构为极简流程化设计（专家定制版）
+  - 新增 edit_file 工具（old_string → new_string 定点修改），避免重写整个文件
+  - 已有 artifact 内容预注入 user message，省去 read_file 轮次
+  - Craft 报告改为结构化格式
+- **Performance**: 修改场景 106s → 45s；新建场景 66s → 50s
+- **Files**: packages/craft-engine/src/index.ts, scripts/verify-craft.ts
+- **Next**: Step 5 L0 恢复执行（enter-runtime 接入 craft-engine）
+
+### [2026-03-30 00:15 GMT+08:00] Step 4 完成：craft-engine 包创建 + 验证通过
+- **Why**: 需要实现 L1 能力工程层，L0 升级后由 L1 基于 Skill 生成/完善 Artifact
+- **Changed**: 新增 packages/craft-engine/（CraftEngine + agentic loop + tool use）
+- **Files**: packages/craft-engine/package.json, tsconfig.json, src/index.ts; scripts/verify-craft.ts
+- **Validated**: 全新需求 + 已有 artifact 修改两个场景均通过
+
 ### [2026-03-29 22:30 GMT+08:00] Phase 2 完成：L0 内核集成验证通过
 - **Why**: 需要证明 Artifact Header 注入 → LLM 自决策链路成立
-- **Changed**: pi-kernel（direct-llm 模式）+ enter-runtime（LLM 决策替代关键词匹配）
-- **Files**: packages/pi-kernel/, packages/enter-runtime/, scripts/debug-api.ts
+- **Changed**: pi-kernel + enter-runtime（LLM 决策替代关键词匹配）
 - **Validated**: 端到端 API 调用，LLM 正确判断 execute/escalate
-- **Next**: Step 4 craft-engine
 
 ### [2026-03-29 20:00 GMT+08:00] 确立完整开发规划
-- **Why**: 需要整体路线图，确定 Pi 内核接入方式
 - **Changed**: 5 Phase + 8 Step 开发计划；CraftAgent 为一等参考
-- **Key Decisions**: 先 TUI 后 GUI；Reference/ 加入 .gitignore
-
-### [2026-03-29 19:29 GMT+08:00] 建立 STATUS.md 机制
-- **Why**: 需要让开发过程可追溯、可接续
-- **Changed**: 新增 STATUS.md 机制
-- **Files**: STATUS.md
 
 ---

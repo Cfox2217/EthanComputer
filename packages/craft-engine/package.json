@@ -1,0 +1,13 @@
+{
+  "name": "@ethan-computer/craft-engine",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@anthropic-ai/sdk": "*",
+    "@ethan-computer/protocol-types": "*",
+    "@ethan-computer/skill-registry": "*",
+    "@ethan-computer/artifact-registry": "*"
+  }
+}
