@@ -1,0 +1,6 @@
+run_id: run_0002
+request: 帮我写一个数据库迁移脚本
+used_artifact: null
+escalated: true
+craft_applied: false
+result: partial
