@@ -10,5 +10,6 @@
     "declarationMap": true,
     "sourceMap": true,
     "composite": true
-  }
+  },
+  "exclude": ["node_modules", "Reference"]
 }

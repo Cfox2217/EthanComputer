@@ -3,8 +3,8 @@
 > 每次完成实际任务后都要更新。
 
 ## Current
-- **Current Focus**: Phase 2 — 接入 Pi 内核驱动 L0
-- **Last Updated**: 2026-03-29 20:00 GMT+08:00
+- **Current Focus**: Phase 3 — L1 Crafting (craft-engine)
+- **Last Updated**: 2026-03-29 21:00 GMT+08:00
 - **Blockers**: none
 
 ## 开发路线（参考 CraftAgent 双内核架构）
@@ -16,8 +16,8 @@
 - [x] skill-registry + artifact-registry
 
 ### Phase 2：Pi 内核集成
-- [ ] Step 3a: 创建 pi-kernel 包（`@mariozechner/pi-coding-agent` 子进程 + JSONL 协议）
-- [ ] Step 3b: 重写 enter-runtime（LLM 自行判断 artifact/升级，删除关键词匹配）
+- [x] Step 3a: pi-kernel 包（direct-llm 模式，Claude API 驱动；pi-subprocess 预留接口）
+- [x] Step 3b: 重写 enter-runtime（LLM 自行判断 artifact/升级，注入 headers 到 system prompt）
 
 ### Phase 3：L1 Crafting
 - [ ] Step 4: 创建 craft-engine 包（接收 Upgrade → 回溯 Skill → 生成 Artifact）
