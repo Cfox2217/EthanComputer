@@ -604,8 +604,11 @@ ethan-computer/
 ├── SPEC.md
 ├── skills/
 │   └── local/
+│       └── <skill-name>/
+│           └── SKILL.md
 ├── artifacts/
 │   └── ethan/
+│       └── <artifact-name>.md
 ├── runs/
 │   ├── logs/
 │   ├── crafts/
@@ -622,17 +625,33 @@ ethan-computer/
 
 ## 13.2 Skill / Artifact 文件格式
 
-MVP 推荐：
+MVP 推荐采用 **SKILL.md 标准格式**（YAML frontmatter + Markdown body）：
 
-- Skill：YAML
-- Artifact：YAML
+- Skill：`SKILL.md` 格式（YAML frontmatter + Markdown body）
+- Artifact：同格式（YAML frontmatter + Markdown body）
 - Run Record：YAML 或 JSON
+
+SKILL.md 格式结构：
+
+```text
+---
+name: <id>
+description: <一句话描述>
+<其他元字段>
+---
+
+# <标题>
+
+<Markdown 正文：场景、约束、执行步骤等>
+```
 
 理由：
 
 - 可读性高
 - 适合手工审查
 - 适合快速迭代
+- frontmatter 提供结构化元数据，Markdown body 提供自然语言指令
+- 与 Claude 生态 SKILL 标准对齐
 
 ## 13.3 运行脚本
 
@@ -687,38 +706,74 @@ MVP 建议使用 TypeScript 或 Python，
 
 ## 15.1 Skill（最小）
 
-```yaml
-skill_id: dev.task.breakdown
+文件：`skills/local/dev.task.breakdown/SKILL.md`
+
+```markdown
+---
+name: dev.task.breakdown
 version: 0.1.0
-title: Break request into engineering tasks
 description: 把自然语言需求拆成工程任务
 scenarios:
   - feature-breakdown
 constraints:
   - 不发明未存在边界
+---
+
+# Break request into engineering tasks
+
+把自然语言形式的需求拆解为可执行的工程任务列表。
+
+## 适用场景
+
+- **feature-breakdown**: 用户给出功能需求，需要拆成开发任务
+
+## 约束
+
+- 不发明未存在的系统边界
+
+## 方法
+
+1. 识别用户请求中的目标
+2. 识别影响边界
+3. 按依赖顺序拆成工程任务
+4. 输出按顺序排列的任务列表
 ```
 
 ## 15.2 Artifact（最小）
 
-```yaml
-artifact_id: artifact.dev.task.breakdown.ethan
-header:
-  title: Ethan task breakdown
-  when_to_use:
-    - 把需求拆成开发任务
-    - 输出实现计划
-  derived_from: dev.task.breakdown
-  escalate_when:
-    - 请求涉及未定义协议
-body:
-  user_facts:
-    project_style: protocol-first
-  execution:
-    - 识别目标
-    - 识别影响边界
-    - 拆成任务
-  escalate_when:
-    - 缺少必要上下文
+文件：`artifacts/ethan/artifact.dev.task.breakdown.ethan.md`
+
+```markdown
+---
+name: artifact.dev.task.breakdown.ethan
+derived_from: dev.task.breakdown
+description: Ethan 专属的任务拆解执行面
+---
+
+# Ethan task breakdown
+
+## When to use
+
+- 把需求拆成开发任务
+- 输出实现计划
+
+## Escalate when
+
+- 请求涉及未定义协议
+
+## User facts
+
+- project_style: protocol-first
+
+## Execution
+
+1. 识别目标
+2. 识别影响边界
+3. 拆成任务
+
+## Escalate when (body)
+
+- 缺少必要上下文
 ```
 
 ## 15.3 Upgrade（最小）
