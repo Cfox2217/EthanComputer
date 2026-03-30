@@ -3,8 +3,8 @@
 > 每次完成实际任务后都要更新。
 
 ## Current
-- **Current Focus**: Phase 3 — L1 Crafting（Step 4 已完成含优化，下一步 Step 5）
-- **Last Updated**: 2026-03-30 01:30 GMT+08:00
+- **Current Focus**: Phase 3 ✓ — L1 Crafting 完成，下一步 Phase 4 TUI
+- **Last Updated**: 2026-03-30 03:50 GMT+08:00
 - **Blockers**: none
 
 ## 开发路线（参考 CraftAgent 双内核架构）
@@ -41,7 +41,13 @@
   - Craft 报告结构化格式：Action / What was added / How L0 should continue / Open boundaries
   - 性能优化：修改场景从 ~106s 降到 ~45s
   - 验证通过（verify-craft.ts）
-- [ ] Step 5: L0 恢复执行（L1 返回后继续）
+- [x] Step 5: L0 恢复执行（L1 返回后继续）
+  - 新增 session-store 包（最小会话记录层， JSONL 格式持久化）
+  - enter-runtime 通过 SessionRecorder 记录和恢复会话
+  - pi-kernel 新增 ChatMessage 类型和 promptMessages()，支持多轮对话
+  - L0 恢复时从 recorder 获取完整会话历史
+  - L0 先参考 L1 craft report 决定如何继续，不是盲跑决策循环
+  - 验证通过（verify-step5.ts,58s 完成 escalate→craft->resume->success 全流程）
 
 ### Phase 4：TUI
 - [ ] Step 6: 创建 tui 包（SPEC §20-21 验收型终端，6 面板）
@@ -65,8 +71,17 @@
 - **补充参考**: `Reference/openclaw-main/`（全面但复杂）
 
 ## Log
-
-### [2026-03-30 01:30 GMT+08:00] Step 4 优化：L1 系统提示词重构 + edit_file + 性能提升
+### [2026-03-30 03:50 GMT+08:00] Step 5 完成：L0 恢复执行 + 会话管理
+- **Why**: L0 升级后需要能恢复会话继续处理
+- **Changed**:
+  - 新增 `session-store` 包（最小 JSONL 持久化， Line 1 = header, Lines 2+ = messages）
+  - `enter-runtime` 通过 `SessionRecorder` 记录和恢复会话
+  - `pi-kernel` 新增 `ChatMessage` 类型和 `promptMessages()`，支持多轮对话
+  - L0 恢复时从 recorder 获取完整会话历史
+  - L0 先参考 L1 craft report 决定如何继续，不是盲跑决策循环
+  - 验证通过（verify-step5.ts，58s 完成 escalate→craft->resume->success 全流程)
+- **Files**: packages/session-store/*, packages/enter-runtime/src/index.ts, packages/pi-kernel/src/index.ts, packages/pi-kernel/src/protocol.ts, scripts/verify-step5.ts
+- **Next**: Phase 4 TUI：L1 系统提示词重构 + edit_file + 性能提升
 - **Why**: L1 响应过慢（修改场景 ~106s），系统提示词目的导向不够明确
 - **Changed**:
   - L1 系统提示词重构为极简流程化设计（专家定制版）
@@ -75,7 +90,7 @@
   - Craft 报告改为结构化格式
 - **Performance**: 修改场景 106s → 45s；新建场景 66s → 50s
 - **Files**: packages/craft-engine/src/index.ts, scripts/verify-craft.ts
-- **Next**: Step 5 L0 恢复执行（enter-runtime 接入 craft-engine）
+- **Next**: Phase 4 TUI（Step 6 创建 tui 包）
 
 ### [2026-03-30 00:15 GMT+08:00] Step 4 完成：craft-engine 包创建 + 验证通过
 - **Why**: 需要实现 L1 能力工程层，L0 升级后由 L1 基于 Skill 生成/完善 Artifact

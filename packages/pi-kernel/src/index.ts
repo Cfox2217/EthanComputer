@@ -1,20 +1,24 @@
 /**
  * pi-kernel — Pi 内核抽象层
  *
- * MVP 的 L0 执行内核。参考 CraftAgent 的双内核架构。
+ * PiKernel 统一接口（start/prompt/stop + AsyncGenerator 事件流）。
+ * prompt 支持单条消息（string）和多轮对话（ChatMessage[]）。
  * 当前使用 direct-llm 模式（直接调 Claude API）。
  * 后续接入 Pi subprocess 模式（@mariozechner/pi-coding-agent）。
  */
 
-export type { AgentEvent } from "./protocol.js";
+export type { AgentEvent, ChatMessage } from "./protocol.js";
 
-import type { AgentEvent } from "./protocol.js";
+import type { AgentEvent, ChatMessage } from "./protocol.js";
 
 // ── PiKernel 统一接口 ────────────────────────────────────
 
 export interface PiKernel {
   start(): Promise<void>;
+  /** 单轮：传入字符串消息 */
   prompt(message: string, systemPrompt?: string): AsyncGenerator<AgentEvent>;
+  /** 多轮：传入完整对话历史 */
+  promptMessages(messages: ChatMessage[], systemPrompt?: string): AsyncGenerator<AgentEvent>;
   stop(): Promise<void>;
 }
 
@@ -51,17 +55,31 @@ class DirectLLMKernel implements PiKernel {
   async start(): Promise<void> {}
 
   async *prompt(message: string, systemPrompt?: string): AsyncGenerator<AgentEvent> {
+    const messages: ChatMessage[] = [{ role: "user", content: message }];
+    yield* this.callLLM(messages, systemPrompt);
+  }
+
+  async *promptMessages(messages: ChatMessage[], systemPrompt?: string): AsyncGenerator<AgentEvent> {
+    yield* this.callLLM(messages, systemPrompt);
+  }
+
+  private async *callLLM(messages: ChatMessage[], systemPrompt?: string): AsyncGenerator<AgentEvent> {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({
       apiKey: this.config.apiKey,
       baseURL: this.config.baseUrl,
     });
 
+    const apiMessages = messages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+
     const response = await client.messages.create({
       model: this.config.model,
       max_tokens: 4096,
       system: systemPrompt || undefined,
-      messages: [{ role: "user", content: message }],
+      messages: apiMessages,
     });
 
     const text = response.content

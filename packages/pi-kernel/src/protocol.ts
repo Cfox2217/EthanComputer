@@ -26,6 +26,13 @@ export type AgentEvent =
   | MessageEndEvent
   | AgentEndEvent;
 
+// ── 对话消息类型 ────────────────────────────────────────────
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 // ── Pi subprocess 协议（后续启用） ──────────────────────────
 
 export interface InitMessage {

@@ -8,6 +8,8 @@
     "@ethan-computer/protocol-types": "*",
     "@ethan-computer/artifact-registry": "*",
     "@ethan-computer/pi-kernel": "*",
+    "@ethan-computer/craft-engine": "*",
+    "@ethan-computer/session-store": "*",
     "js-yaml": "*"
   }
 }

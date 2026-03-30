@@ -27,6 +27,7 @@ async function main() {
   const enter = createEnterRuntime({
     user: "ethan",
     runsDir: join(ROOT, "runs"),
+    sessionsDir: join(ROOT, "runs", "sessions"),
     artifactRegistry,
     kernel,
   });

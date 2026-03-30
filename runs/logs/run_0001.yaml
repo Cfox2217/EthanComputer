@@ -1,6 +1,6 @@
 run_id: run_0001
-request: 帮我把这个需求拆成开发任务
-used_artifact: artifact-dev-task-breakdown-ethan
+request: 帮我监控本地磁盘使用率，超过 85% 时自动报警
+used_artifact: disk-usage-monitor-alert
 escalated: false
 craft_applied: false
 result: success
