@@ -73,7 +73,7 @@ export function App({ onRun, eventEmitter }: AppProps) {
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="gray">
-      <StatusBar phase={currentPhase} runId={currentRunId} elapsed={elapsed} />
+      <StatusBar phase={currentPhase} runId={currentRunId} totalRuns={runs.length} />
       <Text color="gray">{"─".repeat(76)}</Text>
       <Box flexDirection="column" flexGrow={1} paddingX={1}>
         <EventStream runs={runs} />

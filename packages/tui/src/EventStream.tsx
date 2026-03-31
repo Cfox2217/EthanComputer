@@ -9,8 +9,8 @@ interface EventStreamProps {
 export function EventStream({ runs }: EventStreamProps) {
   if (runs.length === 0) {
     return (
-      <Box flexDirection="column" paddingY={6}>
-        <Text color="gray">  输入请求后按 Enter 运行</Text>
+      <Box flexDirection="column" paddingY={4}>
+        <Text color="gray">  ⏎ 输入你的请求，按 Enter 开始运行</Text>
       </Box>
     );
   }
@@ -19,7 +19,11 @@ export function EventStream({ runs }: EventStreamProps) {
     <Box flexDirection="column">
       {runs.map((run, i) => (
         <React.Fragment key={run.runId || i}>
-          {i > 0 && <Text color="gray">{"─".repeat(60)}</Text>}
+          {i > 0 && (
+            <Box marginY={1}>
+              <Text color="gray">{"╌".repeat(76)}</Text>
+            </Box>
+          )}
           <RunCards state={run} />
         </React.Fragment>
       ))}
@@ -43,89 +47,114 @@ function RunCards({ state }: { state: RunState }) {
 
   return (
     <Box flexDirection="column">
+
       {/* Request */}
-      <Card title="Request" color="white">
-        <Text color="white">  {request}</Text>
-      </Card>
+      <Box>
+        <Text color="green" bold>{">"} </Text>
+        <Text color="white">{request}</Text>
+      </Box>
 
       {/* L0 Agent */}
-      <Card
-        title={phase === "l0-resume" ? "L0 · 恢复" : "L0 · Agent"}
-        color="cyan"
+      <SectionHeader
+        icon="◆" label="L0 · Agent" color="cyan"
         stats={statLine(
           l0ReplyAt ? l0ReplyAt - startTime : (startTime && isActive ? Date.now() - startTime : null),
           l0ToolCalls.length,
         )}
-      >
-        <Text color="gray">  {headersCount} headers loaded</Text>
+      />
+      <Box flexDirection="column" marginLeft={4}>
+        <Text color="gray">{headersCount} headers loaded</Text>
         {l0ToolCalls.map((tc, i) => (
-          <Text key={i}>  {tc.tool === "load_artifact" ? "📥" : "⚡"} {tc.tool}: {tc.summary} <Text color="gray">{tc.ms}ms</Text></Text>
+          <Text key={i}>
+            <Text color="yellow">⚡</Text> {tc.tool}: {tc.summary}{" "}
+            <Text color="gray">{tc.ms}ms</Text>
+          </Text>
         ))}
         {streamingText && isActive && phase !== "l1-craft" && (
-          <Text color="gray">  thinking… {truncate(streamingText, 120)}</Text>
+          <Text color="gray">thinking… {truncate(streamingText, 120)}</Text>
         )}
-      </Card>
+      </Box>
 
       {/* L1 Craft */}
       {l1Skill && (
-        <Card title="L1 · Craft" color="yellow"
-          stats={statLine(l1StartAt && l1EndAt ? l1EndAt - l1StartAt : null, l1ToolCalls.length)}>
-          <Text>  Skill: {l1Skill}</Text>
-          {l1ToolCalls.map((tc, i) => (
-            <Text key={i}>  [{tc.round}] {tc.tool}: {tc.summary} <Text color="green">✓</Text> <Text color="gray">{tc.ms}ms</Text></Text>
-          ))}
-          {l1ReportSummary && <Text>  📋 {l1ReportSummary}</Text>}
-        </Card>
+        <>
+          <SectionHeader
+            icon="◆" label="L1 · Craft" color="yellow"
+            stats={statLine(
+              l1StartAt && l1EndAt ? l1EndAt - l1StartAt : null,
+              l1ToolCalls.length,
+            )}
+          />
+          <Box flexDirection="column" marginLeft={4}>
+            <Text>Skill: {l1Skill}</Text>
+            {l1ToolCalls.map((tc, i) => (
+              <Text key={i}>
+                [{tc.round}] {tc.tool}: {tc.summary}{" "}
+                <Text color="green">✓</Text>{" "}
+                <Text color="gray">{tc.ms}ms</Text>
+              </Text>
+            ))}
+            {l1ReportSummary && <Text>📋 {l1ReportSummary}</Text>}
+          </Box>
+        </>
       )}
 
       {/* L0 恢复阶段 */}
       {l0ResumeAt !== null && (
-        <Card title="L0 · 恢复执行" color="cyan"
-          stats={statLine(l0ResumeAt && l0ReplyAt ? l0ReplyAt - l0ResumeAt : null)}>
-          <Text color="gray">  Re-loaded {resumeHeadersCount} headers, continuing…</Text>
-          {streamingText && phase === "l0-resume" && (
-            <Text color="gray">  thinking… {truncate(streamingText, 120)}</Text>
-          )}
-        </Card>
+        <>
+          <SectionHeader
+            icon="◆" label="L0 · 恢复执行" color="cyan"
+            stats={statLine(l0ResumeAt && l0ReplyAt ? l0ReplyAt - l0ResumeAt : null)}
+          />
+          <Box flexDirection="column" marginLeft={4}>
+            <Text color="gray">Re-loaded {resumeHeadersCount} headers, continuing…</Text>
+            {streamingText && phase === "l0-resume" && (
+              <Text color="gray">thinking… {truncate(streamingText, 120)}</Text>
+            )}
+          </Box>
+        </>
       )}
 
       {/* L0 回复 */}
       {l0Reply && (
-        <Card title="L0 · 回复" color="green"
-          stats={statLine(l0ReplyAt ? totalMs : null)}>
-          {l0Reply.split("\n").map((line, i) => (
-            <Text key={i}>  {line}</Text>
-          ))}
-        </Card>
+        <>
+          <SectionHeader icon="◉" label="回复" color="green" />
+          <Box flexDirection="column" marginLeft={4}>
+            {l0Reply.split("\n").map((line, i) => (
+              <Text key={i}>{line}</Text>
+            ))}
+          </Box>
+        </>
       )}
 
       {/* Result */}
       {phase === "done" && (
-        <Card title="Result" color={outcome === "success" ? "green" : "yellow"}>
-          <Text>  {outcome === "success" ? "✓" : "⚠"} {outcome} · {(totalMs / 1000).toFixed(1)}s</Text>
-        </Card>
+        <Box marginTop={1}>
+          <Text color={outcome === "success" ? "green" : "yellow"}>
+            {outcome === "success" ? "✓" : "⚠"} {outcome} · {(totalMs / 1000).toFixed(1)}s
+          </Text>
+        </Box>
       )}
     </Box>
   );
 }
 
-// ── Card 组件 ───────────────────────────────────────────
+// ── Section Header（替代 Card）──────────────────────────────
 
-interface CardProps {
-  title: string;
+interface SectionHeaderProps {
+  icon: string;
+  label: string;
   color: string;
   stats?: string;
-  children: React.ReactNode;
 }
 
-function Card({ title, color, stats, children }: CardProps) {
+function SectionHeader({ icon, label, color, stats }: SectionHeaderProps) {
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>
-      <Box>
-        <Text bold color={color}>{title}</Text>
-        {stats && <Text color="gray"> ── {stats}</Text>}
-      </Box>
-      {children}
+    <Box>
+      <Text>  </Text>
+      <Text color={color}>{icon} </Text>
+      <Text bold color={color}>{label}</Text>
+      {stats && <Text color="gray"> ── {stats}</Text>}
     </Box>
   );
 }
@@ -135,8 +164,7 @@ function Card({ title, color, stats, children }: CardProps) {
 function statLine(ms: number | null, toolCalls?: number): string {
   const parts: string[] = [];
   if (ms !== null) parts.push(`${(ms / 1000).toFixed(1)}s`);
-  if (toolCalls !== undefined) parts.push(`${toolCalls} tools`);
-  parts.push("-- tokens");
+  if (toolCalls !== undefined && toolCalls > 0) parts.push(`${toolCalls} tools`);
   return parts.join(" · ");
 }
 
