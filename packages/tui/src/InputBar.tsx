@@ -31,7 +31,7 @@ export function InputBar({ onSubmit, onQuit, disabled }: InputBarProps) {
   });
 
   return (
-    <Box borderStyle="single" borderColor="gray" paddingX={1}>
+    <Box paddingX={1}>
       <Text color="green">&gt; </Text>
       <Text>{input}</Text>
       <Text color="gray">{disabled ? "" : "│"}</Text>

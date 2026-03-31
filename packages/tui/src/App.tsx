@@ -8,6 +8,7 @@ import {
   initialRunState,
   applyEvent,
   type RunState,
+  type Phase,
 } from "./events.js";
 
 interface AppProps {
@@ -17,24 +18,35 @@ interface AppProps {
 
 export function App({ onRun, eventEmitter }: AppProps) {
   const { exit } = useApp();
-  const [state, setState] = useState<RunState>(initialRunState());
+  const [runs, setRuns] = useState<RunState[]>([]);
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState("0.0");
   const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
+  // 注册事件处理器：request 事件创建新 run，其他事件更新最后一个 run
   useEffect(() => {
     eventEmitter((event: TuiEvent) => {
-      setState((prev) => applyEvent(prev, event));
+      setRuns((prev) => {
+        if (event.type === "request") {
+          return [...prev, applyEvent(initialRunState(), event)];
+        }
+        if (prev.length === 0) return prev;
+        const updated = [...prev];
+        updated[updated.length - 1] = applyEvent(updated[updated.length - 1], event);
+        return updated;
+      });
     });
   }, [eventEmitter]);
 
+  // 计时器
   useEffect(() => {
     timerRef.current = setInterval(() => {
-      setState((prev) => {
-        if (prev.phase !== "idle" && prev.phase !== "done" && prev.startTime > 0) {
-          setElapsed(((Date.now() - prev.startTime) / 1000).toFixed(1));
-        } else if (prev.phase === "done") {
-          setElapsed((prev.totalMs / 1000).toFixed(1));
+      setRuns((prev) => {
+        const current = prev[prev.length - 1];
+        if (current && current.phase !== "idle" && current.phase !== "done" && current.startTime > 0) {
+          setElapsed(((Date.now() - current.startTime) / 1000).toFixed(1));
+        } else if (current && current.phase === "done") {
+          setElapsed((current.totalMs / 1000).toFixed(1));
         }
         return prev;
       });
@@ -42,9 +54,11 @@ export function App({ onRun, eventEmitter }: AppProps) {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
+  const currentPhase: Phase = runs.length > 0 ? runs[runs.length - 1].phase : "idle";
+  const currentRunId = runs.length > 0 ? runs[runs.length - 1].runId : "";
+
   const handleSubmit = useCallback(async (request: string) => {
     setRunning(true);
-    setState(initialRunState());
     try {
       await onRun(request);
     } finally {
@@ -58,9 +72,13 @@ export function App({ onRun, eventEmitter }: AppProps) {
   }, [exit]);
 
   return (
-    <Box flexDirection="column">
-      <StatusBar phase={state.phase} runId={state.runId} elapsed={elapsed} />
-      <EventStream state={state} />
+    <Box flexDirection="column" borderStyle="round" borderColor="gray">
+      <StatusBar phase={currentPhase} runId={currentRunId} elapsed={elapsed} />
+      <Text color="gray">{"─".repeat(76)}</Text>
+      <Box flexDirection="column" flexGrow={1} paddingX={1}>
+        <EventStream runs={runs} />
+      </Box>
+      <Text color="gray">{"─".repeat(76)}</Text>
       <InputBar onSubmit={handleSubmit} onQuit={handleQuit} disabled={running} />
     </Box>
   );

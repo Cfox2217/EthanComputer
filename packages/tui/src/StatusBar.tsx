@@ -19,18 +19,18 @@ interface StatusBarProps {
 export function StatusBar({ phase, runId, elapsed }: StatusBarProps) {
   const { label, color } = PHASE_INFO[phase];
   return (
-    <Box borderStyle="single" borderColor="gray" paddingX={1}>
+    <Box paddingX={1}>
       <Text bold color="white">Ethan Debug Console</Text>
       <Text> ── </Text>
       <Text bold color={color}>{label}</Text>
       {phase !== "idle" && (
-        <Box>
+        <>
           <Text> </Text>
           <Text color="green">●</Text>
           <Text> </Text>
           <Text color="gray">{elapsed}s</Text>
-          {runId && <Text color="gray"> │ {runId}</Text>}
-        </Box>
+          {runId && <Text color="gray"> | {runId}</Text>}
+        </>
       )}
     </Box>
   );

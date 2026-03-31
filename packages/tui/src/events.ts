@@ -38,6 +38,13 @@ export interface RunState {
   outcome: string | null;
   totalMs: number;
   startTime: number;
+  // 各阶段时间戳（用于卡片状态栏）
+  l0DecisionAt: number | null;
+  l1StartAt: number | null;
+  l1EndAt: number | null;
+  l0ResumeAt: number | null;
+  l0ResumeDecisionAt: number | null;
+  l0ReplyAt: number | null;
 }
 
 export function initialRunState(): RunState {
@@ -58,11 +65,19 @@ export function initialRunState(): RunState {
     outcome: null,
     totalMs: 0,
     startTime: 0,
+    l0DecisionAt: null,
+    l1StartAt: null,
+    l1EndAt: null,
+    l0ResumeAt: null,
+    l0ResumeDecisionAt: null,
+    l0ReplyAt: null,
   };
 }
 
 /** 将 TuiEvent 应用到 RunState */
 export function applyEvent(state: RunState, event: TuiEvent): RunState {
+  const now = Date.now();
+
   switch (event.type) {
     case "request":
       return {
@@ -70,22 +85,26 @@ export function applyEvent(state: RunState, event: TuiEvent): RunState {
         phase: "l0-decision",
         runId: event.runId,
         request: event.text,
-        startTime: Date.now(),
+        startTime: now,
       };
     case "headers_loaded":
       return { ...state, headersCount: event.count };
     case "l0_streaming":
       return { ...state, streamingText: event.text };
-    case "l0_decision":
+    case "l0_decision": {
+      const isResume = state.phase === "l0-resume";
       return {
         ...state,
         l0Action: event.action,
         l0ArtifactId: event.artifact_id ?? null,
         l0Reason: event.reason ?? null,
         streamingText: "",
+        l0DecisionAt: isResume ? state.l0DecisionAt : now,
+        l0ResumeDecisionAt: isResume ? now : null,
       };
+    }
     case "l1_start":
-      return { ...state, phase: "l1-craft", l1Skill: event.skill };
+      return { ...state, phase: "l1-craft", l1Skill: event.skill, l1StartAt: now };
     case "l1_tool_call":
       return {
         ...state,
@@ -97,16 +116,17 @@ export function applyEvent(state: RunState, event: TuiEvent): RunState {
         }],
       };
     case "l1_report":
-      return { ...state, l1ReportSummary: event.summary };
+      return { ...state, l1ReportSummary: event.summary, l1EndAt: now };
     case "l0_resume":
       return {
         ...state,
         phase: "l0-resume",
         resumeHeadersCount: event.headersCount,
         streamingText: "",
+        l0ResumeAt: now,
       };
     case "l0_reply":
-      return { ...state, l0Reply: event.text };
+      return { ...state, l0Reply: event.text, l0ReplyAt: now };
     case "result":
       return {
         ...state,
