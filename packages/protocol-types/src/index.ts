@@ -72,9 +72,10 @@ export type TuiEvent =
   | { type: "headers_loaded"; count: number }
   | { type: "l0_streaming"; text: string }
   | { type: "l0_decision"; action: "execute" | "escalate"; artifact_id?: string; reason?: string }
+  | { type: "l0_tool_call"; tool: string; summary: string; ms: number }
+  | { type: "l0_reply"; text: string }
   | { type: "l1_start"; skill: string }
   | { type: "l1_tool_call"; round: number; tool: string; summary: string; ms: number }
   | { type: "l1_report"; summary: string }
   | { type: "l0_resume"; headersCount: number }
-  | { type: "l0_reply"; text: string }
   | { type: "result"; outcome: string; totalMs: number };

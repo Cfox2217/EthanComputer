@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { RunState } from "./events.js";
+import type { RunState, ToolCallRecord } from "./events.js";
 
 interface EventStreamProps {
   runs: RunState[];
@@ -30,10 +30,12 @@ export function EventStream({ runs }: EventStreamProps) {
 // ── 单次运行的所有卡片 ────────────────────────────────
 
 function RunCards({ state }: { state: RunState }) {
-  const { phase, request, headersCount, streamingText, l0Action, l0Reason,
-    l0ArtifactId, l1Skill, l1ToolCalls, l1ReportSummary,
-    resumeHeadersCount, l0Reply, outcome, totalMs, startTime,
-    l0DecisionAt, l1StartAt, l1EndAt, l0ResumeAt, l0ResumeDecisionAt } = state;
+  const { phase, request, headersCount, streamingText, l0ToolCalls,
+    l1Skill, l1ToolCalls, l1ReportSummary,
+    l0Reply, outcome, totalMs, startTime,
+    l1StartAt, l1EndAt, l0ResumeAt, l0ReplyAt } = state;
+
+  const isActive = phase !== "done" && phase !== "idle";
 
   return (
     <Box flexDirection="column">
@@ -42,20 +44,25 @@ function RunCards({ state }: { state: RunState }) {
         <Text color="white">  {request}</Text>
       </Card>
 
-      {/* L0 决策 */}
-      <Card title="L0 · 决策" color="cyan" stats={formatMs(l0DecisionAt && startTime ? l0DecisionAt - startTime : null)}>
+      {/* L0 Agent — 思考 + tool calls */}
+      <Card
+        title={phase === "l0-resume" ? "L0 · 恢复" : "L0 · Agent"}
+        color="cyan"
+        stats={formatStats(
+          startTime && (l0ReplyAt || (l1StartAt && !l1EndAt) || Date.now())
+            ? ((l0ReplyAt || (l1StartAt && !l1EndAt) ? l0ReplyAt || l1StartAt! : Date.now()) - startTime)
+            : null,
+          l0ToolCalls.length,
+        )}
+      >
         <Text color="gray">  {headersCount} headers loaded</Text>
-        {streamingText && phase === "l0-decision" && (
+        {/* Tool calls */}
+        {l0ToolCalls.map((tc, i) => (
+          <Text key={i}>  {tc.tool === "load_artifact" ? "📥" : "⚡"} {tc.tool}: {tc.summary} <Text color="gray">{tc.ms}ms</Text></Text>
+        ))}
+        {/* Streaming text during thinking */}
+        {streamingText && isActive && phase !== "l1-craft" && (
           <Text color="gray">  thinking… {truncate(streamingText, 120)}</Text>
-        )}
-        {l0Action === "execute" && (
-          <Text color="green">  ✓ EXECUTE → {l0ArtifactId}</Text>
-        )}
-        {l0Action === "escalate" && (
-          <Box flexDirection="column">
-            <Text color="yellow">  ⚡ ESCALATE</Text>
-            <Text color="yellow">  {l0Reason}</Text>
-          </Box>
         )}
       </Card>
 
@@ -71,12 +78,12 @@ function RunCards({ state }: { state: RunState }) {
         </Card>
       )}
 
-      {/* L0 恢复 */}
+      {/* L0 恢复阶段（L1 完成后） */}
       {l0ResumeAt !== null && (
-        <Card title="L0 · 恢复" color="cyan"
-          stats={formatMs(l0ResumeAt && l0ResumeDecisionAt ? l0ResumeDecisionAt - l0ResumeAt : null)}>
-          <Text color="gray">  Re-loaded {resumeHeadersCount} headers</Text>
-          {phase === "l0-resume" && streamingText && (
+        <Card title="L0 · 恢复执行" color="cyan"
+          stats={formatMs(l0ResumeAt && l0ReplyAt ? l0ReplyAt - l0ResumeAt : null)}>
+          <Text color="gray">  Re-loaded headers, continuing…</Text>
+          {streamingText && phase === "l0-resume" && (
             <Text color="gray">  thinking… {truncate(streamingText, 120)}</Text>
           )}
         </Card>
@@ -84,7 +91,8 @@ function RunCards({ state }: { state: RunState }) {
 
       {/* L0 回复 */}
       {l0Reply && (
-        <Card title="L0 · 回复" color="green">
+        <Card title="L0 · 回复" color="green"
+          stats={formatMs(l0ReplyAt ? totalMs : null)}>
           {l0Reply.split("\n").map((line, i) => (
             <Text key={i}>  {line}</Text>
           ))}
@@ -101,7 +109,7 @@ function RunCards({ state }: { state: RunState }) {
   );
 }
 
-// ── Card 组件（紧凑边框） ──────────────────────────────
+// ── Card 组件 ───────────────────────────────────────────
 
 interface CardProps {
   title: string;
@@ -122,7 +130,7 @@ function Card({ title, color, stats, children }: CardProps) {
   );
 }
 
-// ── 工具函数 ───────────────────────────────────────────
+// ── 工具函数 ────────────────────────────────────────────
 
 function formatMs(ms: number | null, toolCalls?: number): string {
   const parts: string[] = [];
