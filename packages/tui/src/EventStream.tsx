@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { RunState, ToolCallRecord } from "./events.js";
+import type { RunState } from "./events.js";
 
 interface EventStreamProps {
   runs: RunState[];
@@ -30,10 +30,14 @@ export function EventStream({ runs }: EventStreamProps) {
 // ── 单次运行的所有卡片 ────────────────────────────────
 
 function RunCards({ state }: { state: RunState }) {
-  const { phase, request, headersCount, streamingText, l0ToolCalls,
+  const {
+    phase, request, headersCount, streamingText,
+    l0ToolCalls, l0Reply,
     l1Skill, l1ToolCalls, l1ReportSummary,
-    l0Reply, outcome, totalMs, startTime,
-    l1StartAt, l1EndAt, l0ResumeAt, l0ReplyAt } = state;
+    resumeHeadersCount,
+    outcome, totalMs, startTime,
+    l1StartAt, l1EndAt, l0ResumeAt, l0ReplyAt,
+  } = state;
 
   const isActive = phase !== "done" && phase !== "idle";
 
@@ -44,23 +48,19 @@ function RunCards({ state }: { state: RunState }) {
         <Text color="white">  {request}</Text>
       </Card>
 
-      {/* L0 Agent — 思考 + tool calls */}
+      {/* L0 Agent */}
       <Card
         title={phase === "l0-resume" ? "L0 · 恢复" : "L0 · Agent"}
         color="cyan"
-        stats={formatStats(
-          startTime && (l0ReplyAt || (l1StartAt && !l1EndAt) || Date.now())
-            ? ((l0ReplyAt || (l1StartAt && !l1EndAt) ? l0ReplyAt || l1StartAt! : Date.now()) - startTime)
-            : null,
+        stats={statLine(
+          l0ReplyAt ? l0ReplyAt - startTime : (startTime && isActive ? Date.now() - startTime : null),
           l0ToolCalls.length,
         )}
       >
         <Text color="gray">  {headersCount} headers loaded</Text>
-        {/* Tool calls */}
         {l0ToolCalls.map((tc, i) => (
           <Text key={i}>  {tc.tool === "load_artifact" ? "📥" : "⚡"} {tc.tool}: {tc.summary} <Text color="gray">{tc.ms}ms</Text></Text>
         ))}
-        {/* Streaming text during thinking */}
         {streamingText && isActive && phase !== "l1-craft" && (
           <Text color="gray">  thinking… {truncate(streamingText, 120)}</Text>
         )}
@@ -69,7 +69,7 @@ function RunCards({ state }: { state: RunState }) {
       {/* L1 Craft */}
       {l1Skill && (
         <Card title="L1 · Craft" color="yellow"
-          stats={formatMs(l1StartAt && l1EndAt ? l1EndAt - l1StartAt : null, l1ToolCalls.length)}>
+          stats={statLine(l1StartAt && l1EndAt ? l1EndAt - l1StartAt : null, l1ToolCalls.length)}>
           <Text>  Skill: {l1Skill}</Text>
           {l1ToolCalls.map((tc, i) => (
             <Text key={i}>  [{tc.round}] {tc.tool}: {tc.summary} <Text color="green">✓</Text> <Text color="gray">{tc.ms}ms</Text></Text>
@@ -78,11 +78,11 @@ function RunCards({ state }: { state: RunState }) {
         </Card>
       )}
 
-      {/* L0 恢复阶段（L1 完成后） */}
+      {/* L0 恢复阶段 */}
       {l0ResumeAt !== null && (
         <Card title="L0 · 恢复执行" color="cyan"
-          stats={formatMs(l0ResumeAt && l0ReplyAt ? l0ReplyAt - l0ResumeAt : null)}>
-          <Text color="gray">  Re-loaded headers, continuing…</Text>
+          stats={statLine(l0ResumeAt && l0ReplyAt ? l0ReplyAt - l0ResumeAt : null)}>
+          <Text color="gray">  Re-loaded {resumeHeadersCount} headers, continuing…</Text>
           {streamingText && phase === "l0-resume" && (
             <Text color="gray">  thinking… {truncate(streamingText, 120)}</Text>
           )}
@@ -92,7 +92,7 @@ function RunCards({ state }: { state: RunState }) {
       {/* L0 回复 */}
       {l0Reply && (
         <Card title="L0 · 回复" color="green"
-          stats={formatMs(l0ReplyAt ? totalMs : null)}>
+          stats={statLine(l0ReplyAt ? totalMs : null)}>
           {l0Reply.split("\n").map((line, i) => (
             <Text key={i}>  {line}</Text>
           ))}
@@ -132,7 +132,7 @@ function Card({ title, color, stats, children }: CardProps) {
 
 // ── 工具函数 ────────────────────────────────────────────
 
-function formatMs(ms: number | null, toolCalls?: number): string {
+function statLine(ms: number | null, toolCalls?: number): string {
   const parts: string[] = [];
   if (ms !== null) parts.push(`${(ms / 1000).toFixed(1)}s`);
   if (toolCalls !== undefined) parts.push(`${toolCalls} tools`);
