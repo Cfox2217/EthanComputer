@@ -24,13 +24,13 @@ export function StatusBar({ phase, runId, elapsed }: StatusBarProps) {
       <Text> ── </Text>
       <Text bold color={color}>{label}</Text>
       {phase !== "idle" && (
-        <>
+        <Box>
           <Text> </Text>
           <Text color="green">●</Text>
           <Text> </Text>
           <Text color="gray">{elapsed}s</Text>
           {runId && <Text color="gray"> │ {runId}</Text>}
-        </>
+        </Box>
       )}
     </Box>
   );

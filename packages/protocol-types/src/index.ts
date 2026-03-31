@@ -76,4 +76,5 @@ export type TuiEvent =
   | { type: "l1_tool_call"; round: number; tool: string; summary: string; ms: number }
   | { type: "l1_report"; summary: string }
   | { type: "l0_resume"; headersCount: number }
+  | { type: "l0_reply"; text: string }
   | { type: "result"; outcome: string; totalMs: number };

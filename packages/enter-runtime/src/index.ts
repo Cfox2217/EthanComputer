@@ -223,6 +223,13 @@ function buildResumeMessage(
   return msg;
 }
 
+// ── L0 回复构造 ────────────────────────────────────────
+
+function buildExecuteReply(decision: ExecuteDecision, artifact: Artifact): string {
+  const steps = artifact.body.execution.map((s, i) => `${i + 1}. ${s}`).join("\n");
+  return `已匹配 Artifact「${artifact.header.title}」\n\n执行计划：${decision.execution_plan}\n\n执行步骤：\n${steps}`;
+}
+
 // ── EnterRuntime ────────────────────────────────────────
 
 export interface EnterRuntimeConfig {
@@ -307,6 +314,8 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
       // 直接执行
       if (initialDecision.action === "execute") {
         const artifact = await artifactRegistry.load(user, initialDecision.artifact_id);
+        const replyText = buildExecuteReply(initialDecision, artifact);
+        emit({ type: "l0_reply", text: replyText });
         const record: RunRecord = {
           run_id: runId,
           request,
@@ -391,6 +400,8 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
 
       if (resumeDecision.action === "execute") {
         const artifact = await artifactRegistry.load(user, resumeDecision.artifact_id);
+        const replyText = buildExecuteReply(resumeDecision, artifact);
+        emit({ type: "l0_reply", text: replyText });
         const record: RunRecord = {
           run_id: runId,
           request,

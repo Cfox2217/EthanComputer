@@ -78,6 +78,9 @@ async function main() {
       case "l0_resume":
         console.log(`  [l0_resume] headers=${e.headersCount}`);
         break;
+      case "l0_reply":
+        console.log(`  [l0_reply] "${e.text.slice(0, 80)}"`);
+        break;
       case "result":
         console.log(`  [result] ${e.outcome} ${e.totalMs}ms`);
         break;

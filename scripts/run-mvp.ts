@@ -8,7 +8,7 @@
  * 1. 环境变量 ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL / ANTHROPIC_MODEL
  * 2. 项目根目录 .env.local 文件
  *
- * 运行: node --experimental-transform-types scripts/run-mvp.ts
+ * 运行: npx tsx scripts/run-mvp.ts
  */
 
 import { join, dirname } from "node:path";
@@ -19,7 +19,7 @@ import { createArtifactRegistry } from "@ethan-computer/artifact-registry";
 import { createPiKernel } from "@ethan-computer/pi-kernel";
 import { createCraftEngine } from "@ethan-computer/craft-engine";
 import { createEnterRuntime } from "@ethan-computer/enter-runtime";
-import { startTui, type ArtifactHeaderBrief } from "@ethan-computer/tui";
+import { startTui } from "@ethan-computer/tui";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -33,7 +33,6 @@ interface Config {
 }
 
 function loadConfig(): Config {
-  // 从 .env.local 读取
   const envPath = join(ROOT, ".env.local");
   const fileEnv: Record<string, string> = {};
   if (existsSync(envPath)) {
@@ -79,17 +78,8 @@ async function main() {
     baseUrl: config.baseUrl,
   });
 
-  // 加载初始 Artifact Headers 供 TUI 右侧面板
-  const summaries = await artifactRegistry.listHeaders("ethan");
-  const initialHeaders: ArtifactHeaderBrief[] = summaries.map((s) => ({
-    title: s.header.title,
-    when_to_use: s.header.when_to_use,
-    derived_from: s.header.derived_from,
-  }));
-
   // ── 启动 TUI ──────────────────────────────────────────
   const { emit, waitUntilExit } = startTui({
-    artifactHeaders: initialHeaders,
     onRun: async (request: string) => {
       const craftEngine = createCraftEngine({
         skillRegistry,

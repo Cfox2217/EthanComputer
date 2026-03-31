@@ -32,6 +32,8 @@ export interface RunState {
   l1ReportSummary: string | null;
   /** 恢复阶段 */
   resumeHeadersCount: number | null;
+  /** L0 最终回复 */
+  l0Reply: string | null;
   /** 最终结果 */
   outcome: string | null;
   totalMs: number;
@@ -52,6 +54,7 @@ export function initialRunState(): RunState {
     l1ToolCalls: [],
     l1ReportSummary: null,
     resumeHeadersCount: null,
+    l0Reply: null,
     outcome: null,
     totalMs: 0,
     startTime: 0,
@@ -102,6 +105,8 @@ export function applyEvent(state: RunState, event: TuiEvent): RunState {
         resumeHeadersCount: event.headersCount,
         streamingText: "",
       };
+    case "l0_reply":
+      return { ...state, l0Reply: event.text };
     case "result":
       return {
         ...state,

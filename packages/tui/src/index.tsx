@@ -5,7 +5,6 @@
  */
 
 export { App } from "./App.js";
-export { ContextPanel, type ArtifactHeaderBrief } from "./ContextPanel.js";
 export { InputBar } from "./InputBar.js";
 export {
   initialRunState,
@@ -19,10 +18,8 @@ import React from "react";
 import { render } from "ink";
 import { App } from "./App.js";
 import type { TuiEvent } from "@ethan-computer/protocol-types";
-import type { ArtifactHeaderBrief } from "./ContextPanel.js";
 
 export interface TuiOptions {
-  artifactHeaders: ArtifactHeaderBrief[];
   onRun: (request: string) => Promise<void>;
 }
 
@@ -42,7 +39,6 @@ export function startTui(options: TuiOptions): {
 
   const { waitUntilExit } = render(
     React.createElement(App, {
-      artifactHeaders: options.artifactHeaders,
       onRun: options.onRun,
       eventEmitter,
     }),
