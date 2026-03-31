@@ -3,8 +3,8 @@
 > 每次完成实际任务后都要更新。
 
 ## Current
-- **Current Focus**: Phase 3 ✓ — L1 Crafting 完成，下一步 Phase 4 TUI
-- **Last Updated**: 2026-03-30 03:50 GMT+08:00
+- **Current Focus**: Phase 4 ✓ — TUI Debug Console 完成
+- **Last Updated**: 2026-03-31 01:20 GMT+08:00
 - **Blockers**: none
 
 ## 开发路线（参考 CraftAgent 双内核架构）
@@ -49,9 +49,14 @@
   - L0 先参考 L1 craft report 决定如何继续，不是盲跑决策循环
   - 验证通过（verify-step5.ts,58s 完成 escalate→craft->resume->success 全流程）
 
-### Phase 4：TUI
-- [ ] Step 6: 创建 tui 包（SPEC §20-21 验收型终端，6 面板）
-- [ ] Step 7: 集成脚本（run-mvp.ts / replay-run.ts）
+### Phase 4：TUI ✓
+- [x] Step 6: 创建 tui 包（Debug Console，左右双栏实时事件流）
+  - pi-kernel 改用 messages.stream() 实现 true streaming
+  - enter-runtime 添加 onEvent 回调，在各阶段发射 TuiEvent
+  - craft-engine 添加 onEvent 回调，发射 L1 tool call/report 事件
+  - tui 包：chalk + ANSI escape codes，alternate screen buffer
+  - 左栏：卡片式事件流（L0/L1/Resume/Done）；右栏：Artifact Headers + Run Stats
+- [x] Step 7: 集成脚本（run-mvp.ts）
 
 ### Phase 5：Run Record & Replay
 - [ ] Step 8: 创建 replay 包（记录 + 回放 + 差异比较）
@@ -65,12 +70,36 @@
 - craft-engine: 无对应 Skill 场景当前未处理（agent 自行决策），后续需评估是否需要显式 fallback
 - craft-engine: agentic loop 无 token 用量统计，后续需加
 - craft-engine: 新建场景 write_file 仍需输出完整文件，速度受限于模型生成时间
+- tui: 当前用 chalk + ANSI，不支持复杂交互（滚动、选中、tab 切换），后续如需更好体验考虑 pi-tui 或 blessed
+- tui: streaming 时每次 text_delta 全量重绘，高频率 streaming 时可能闪烁，后续可优化为增量渲染
+- pi-kernel: streaming 使用 Anthropic SDK 的 stream() API，需确认智谱兼容端点支持 SSE
 
 ## 参考项目
 - **一等参考**: `Reference/craft-agents-oss-main/`（双内核 Pi + Claude Agent SDK）
 - **补充参考**: `Reference/openclaw-main/`（全面但复杂）
 
 ## Log
+### [2026-03-31 01:20 GMT+08:00] Phase 4 完成：TUI Debug Console
+- **Why**: 需要实时观察各模块（L0/L1/Kernel）的响应和处理，用于 debug 和后续开发
+- **Changed**:
+  - 新增 `packages/tui/`（chalk + ANSI escape codes，左右双栏实时 Debug Console）
+  - `packages/pi-kernel/`：改用 `messages.stream()` API，逐 token yield text_delta
+  - `packages/enter-runtime/`：添加 `onEvent` 回调，在各阶段发射 TuiEvent
+  - `packages/craft-engine/`：添加 `onEvent` 回调，发射 L1 tool call/report 事件
+  - `packages/protocol-types/`：新增 `TuiEvent` 联合类型
+  - `HANDLE_SPEC.md` §19-21：替换为 Debug Console 规范
+  - `scripts/run-mvp.ts`：集成 TUI 的启动脚本
+- **Architecture decisions**:
+  - 放弃 Ink（yoga-layout 3.x 的 top-level await 与 tsx CJS 模式不兼容）
+  - 改用 chalk + 原生 ANSI escape codes，更轻更稳定
+  - TUI 定位从"验收型 Console"改为"Debug Console"
+- **Tech debt**:
+  - streaming 全量重绘可能闪烁（后续增量渲染）
+  - 需验证智谱端点 SSE streaming 兼容性
+- **Files**: packages/tui/*, packages/pi-kernel/src/index.ts, packages/enter-runtime/src/index.ts, packages/craft-engine/src/index.ts, packages/protocol-types/src/index.ts, scripts/run-mvp.ts
+- **Validated**: 全部包编译通过，TUI import 正常
+- **Next**: Phase 5 Run Record & Replay（Step 8 replay 包）
+
 ### [2026-03-30 03:50 GMT+08:00] Step 5 完成：L0 恢复执行 + 会话管理
 - **Why**: L0 升级后需要能恢复会话继续处理
 - **Changed**:

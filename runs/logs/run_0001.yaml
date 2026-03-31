@@ -1,6 +1,6 @@
 run_id: run_0001
-request: 帮我监控本地磁盘使用率，超过 85% 时自动报警
-used_artifact: disk-usage-monitor-alert
-escalated: false
-craft_applied: false
+request: 你叫啥
+used_artifact: self-introduction-chat
+escalated: true
+craft_applied: true
 result: success

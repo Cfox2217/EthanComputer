@@ -415,7 +415,17 @@ Git 不是形式，而是工程边界的一部分。
   - 事件流 + EventAdapter：`packages/shared/src/agent/pi/event-adapter.ts`
 - 后期 GUI 直接借鉴其 React + Tiptap 前端
 
-### 15.2 OpenClaw（补充参考）
+### 15.2 Gemini CLI（TUI 参考）
+- 路径：`Reference/gemini-cli/`
+- TypeScript + Ink（React for CLI）实现的终端 AI 编码助手
+- TUI 开发阶段的主要借鉴对象
+- 关键学习点：
+  - Ink 组件架构：流式文本、对话消息、工具调用状态
+  - 终端布局与响应式渲染
+  - 用户输入处理与快捷键绑定
+- 同为 TypeScript 技术栈，可直接借鉴代码模式
+
+### 15.3 OpenClaw（补充参考）
 - 路径：`Reference/openclaw-main/`
 - 全面但复杂，作为架构模式和最佳实践的补充来源
 

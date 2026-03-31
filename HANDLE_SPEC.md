@@ -943,334 +943,137 @@ MVP 的重点不是功能多，而是：
 
 ---
 
-# 19. 无 UI 验收不够时，必须提供最小 TUI
+# 19. Debug Console（实时调试终端）
 
-虽然 MVP 不做产品级 UI，但为了让人类真正参与验收、观察成长、获得反馈感，MVP 应补充一个**验收型 TUI**。
+Ethan Computer 的 TUI 定位是**实时 Debug Console**，不是验收展示界面。
 
-这个 TUI 不替代系统机制，只作为：
+它的核心用途：
 
-- 请求触发入口
-- 过程观察窗口
-- 结果确认面
-- replay 触发入口
+> **让开发者在运行时清楚看到各模块（L0、L1、Kernel）的响应和处理过程，用于 debug 和后续开发。**
 
-它的目标不是展示“产品感”，而是展示：
-
-> **Ethan 这次是如何工作的，系统有没有因此成长。**
-
----
-
-# 20. MVP 验收型 TUI 规范（Ethan Acceptance Console）
-
-MVP 虽不做产品级 UI，但应提供一个**最小 TUI**，作为人类参与式验收入口。
-
-这个 TUI 的定位不是聊天前台，不是 Dashboard，也不是后台管理系统。
-
-它的定位是：
-
-> **一个让开发者 / 验收者能亲自参与 Ethan 闭环、观察 L0 / L1 运行、确认 Artifact 成长是否合理的终端控制台。**
-
-也就是说，TUI 在 MVP 中承担的是：
+TUI 承担：
 
 - 请求触发入口
-- 运行过程观察窗口
-- 成长结果确认面
+- 运行时实时观察窗口（LLM streaming、tool calls、timing）
+- 运行结果查看
 - replay 触发入口
 
-## 20.1 为什么 MVP 需要 TUI
+TUI 不承担：
 
-MVP 阶段即使没有 Web UI，也仍然需要一个最小交互面。
-
-原因不是为了产品感，而是为了：
-
-1. 让人类能亲自发起请求
-2. 让人类能看到系统当前“会什么”
-3. 让人类能看到 L0 / L1 的判断与分工
-4. 让人类能确认这次成长是否合理
-5. 让验收不只是看日志文件，而是能实时参与
-
-因此，TUI 是 MVP 的**验收界面**，不是 MVP 的“产品界面”。
-
-## 20.2 TUI 的角色边界
-
-TUI 负责：
-
-- 发起一次请求
-- 展示当前注入给 L0 的 Artifact Headers
-- 展示 L0 的判断结果
-- 展示 L1 的 crafting 结果（若发生升级）
-- 展示最终执行结果
-- 展示本次运行记录与 Artifact 更新
-- 提供 Accept / Reject / Replay 等最小人工动作
-
-TUI 不负责：
-
-- 长会话聊天产品体验
-- 多用户界面
+- 产品级聊天体验
 - 配置中心
-- 技能市场浏览
-- 图形化仪表盘
 - 复杂历史分析
-- Web UI
-- 权限与后台系统
-
-一句话：
-
-> **TUI 只服务于“参与验收”和“观察成长”，不服务于产品化展示。**
-
-## 20.3 TUI 必须支持的动作
-
-MVP 中 TUI 至少应支持以下动作：
-
-1. **Run Request**：输入并发起一个请求
-2. **Accept Result**：确认本次结果与本次成长合理
-3. **Reject Result**：标记本次结果或 Artifact 增长不合理
-4. **Replay Latest**：重放最近一次运行
-5. **View Record**：查看本次运行记录与相关 Artifact
-
-其中 1、2、4 是最小必需；3、5 可以很轻，但建议具备。
-
-## 20.4 TUI 必须呈现的 6 个面板
-
-MVP TUI 不需要复杂布局，但至少要能按信息分区展示以下 6 块内容：
-
-### 面板 1：Request
-
-展示：
-
-- 当前输入的请求
-- 当前运行的 request_id / run_id（若已生成）
-
-作用：
-
-- 让用户明确“这次系统正在处理什么”
-
-### 面板 2：Visible Artifact Headers
-
-展示：
-
-- 当前注入给 L0 的 Artifact Header 列表
-- 每个 Header 的 `title`
-- `when_to_use`
-- `derived_from`
-- `escalate_when`（若有）
-
-作用：
-
-- 让人类看到“L0 眼里当前有哪些现成执行面”
-- 这是 Ethan 当前能力表面的最直接体现
-
-### 面板 3：L0 Decision
-
-展示：
-
-- L0 当前选中了哪个 Artifact（若有）
-- L0 是否认为当前覆盖足够
-- 若不足，为什么不足
-- L0 是否决定升级给 L1
-
-作用：
-
-- 让用户能直观看到 L0 是否真的是“先看执行面，再决定升级”
-
-### 面板 4：L1 Craft
-
-只有在发生升级时显示。
-
-展示：
-
-- L1 使用了哪个 Skill
-- L1 是新建 Artifact 还是扩展现有 Artifact
-- 本次新增或修改了什么
-- `resume_hint` 是什么
-
-作用：
-
-- 让用户看到“这次缺口是如何变成能力沉淀的”
-
-### 面板 5：Final Result
-
-展示：
-
-- 最终执行结果
-- 本次是否成功
-- 本次是否比之前更直接依赖 Artifact（若可比较）
-
-作用：
-
-- 让用户看到闭环有没有真正完成
-
-### 面板 6：Growth / Record
-
-展示：
-
-- 本次是否生成或更新了 Artifact
-- 新 Artifact 路径或 ID
-- Run Record 路径
-- 是否可 Replay
-
-作用：
-
-- 让用户看到“这次运行有没有留下成长痕迹”
-
-## 20.5 TUI 的展示原则
-
-TUI 的信息展示应遵守以下原则：
-
-1. **按 Ethan 的流程顺序展示**，而不是按实现模块杂乱展示
-2. **每一块信息都要回答一个明确问题**，例如“L0 看到了什么”“为什么升级”
-3. **不要把日志原封不动堆给用户**，而是用结构化摘要呈现
-4. **不要过度美化**，以清晰为主
-5. **不要隐藏升级与成长过程**，因为这正是 Ethan MVP 的核心价值
 
 ---
 
-# 21. Ethan Acceptance Console 最小界面结构
+# 20. Debug Console 规范
 
-以下是推荐的 MVP TUI 结构。
+## 20.1 布局
 
-## 21.1 总体布局
-
-推荐单屏终端布局：
+左右双栏终端布局：
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│ Ethan Acceptance Console                                     │
-├──────────────────────────────────────────────────────────────┤
-│ Request                                                      │
-│ > 把这个需求拆成 Ethan 的开发任务                                │
-├──────────────────────────────────────────────────────────────┤
-│ Visible Artifact Headers                                     │
-│ 1. Ethan task breakdown                                      │
-│    - when_to_use: 把需求拆成开发任务 / 输出实现计划               │
-│    - derived_from: dev-task-breakdown                        │
-│ 2. ...                                                       │
-├──────────────────────────────────────────────────────────────┤
-│ L0 Decision                                                  │
-│ selected: Ethan task breakdown                               │
-│ coverage: insufficient                                       │
-│ reason: touches undefined protocol boundary                  │
-│ escalated: yes                                               │
-├──────────────────────────────────────────────────────────────┤
-│ L1 Craft                                                     │
-│ skill: dev-task-breakdown                                    │
-│ action: extend artifact                                      │
-│ changes: added protocol-gap scenario                         │
-│ resume_hint: ready                                           │
-├──────────────────────────────────────────────────────────────┤
-│ Final Result                                                 │
-│ - 任务 1：定义最小对象模型                                       │
-│ - 任务 2：实现本地 Skill / Artifact 读取                        │
-│ - ...                                                        │
-├──────────────────────────────────────────────────────────────┤
-│ Growth / Record                                              │
-│ artifact updated: yes                                        │
-│ run record: runs/logs/run_0001.yaml                          │
-│ replayable: yes                                              │
-├──────────────────────────────────────────────────────────────┤
-│ [R]un  [A]ccept  [J]Reject  [P]Replay Latest  [V]View Record │
-└──────────────────────────────────────────────────────────────┘
+┌─ Ethan Debug Console ─── L0·决策中 ● 3.2s ──────────────────┐
+│                                          │ Context           │
+│  ▸ Request                               │                   │
+│  │ “帮我拆解这个需求”                       │ Artifact Headers   │
+│  └────────────────────────────────────┘   │ ┌───────────────┐ │
+│                                            │ │ task-breakdown │ │
+│  ── L0 ──────────────────────────────────  │ │ when: 拆任务   │ │
+│  ◆ 3 artifact headers loaded              │ │ from: dev-task │ │
+│  ◆ LLM → {“action”:”escalate”,...}        │ └───────────────┘ │
+│  ⚡ ESCALATE · 缺少协议缺口场景             │                   │
+│                                            │ Run Stats         │
+│  ── L1 CraftEngine ──────────────────────  │ Duration: 3.2s    │
+│  ◆ Skill: dev-task-breakdown              │ LLM calls: 3      │
+│  [1] write_file ✓ 45ms                    │ Tool calls: 2     │
+│  [2] text response ✓ 32ms                 │                   │
+│  📋 Action: extended                      │ Active Skill      │
+│                                            │ dev-task-bd       │
+│  ── L0 Resume ───────────────────────────  │                   │
+│  ◆ Re-loaded 4 headers                    │                   │
+│  ◆ EXECUTE · artifact: xxx-ethan          │                   │
+│                                            │                   │
+│  ── Done ────────────────────────────────  │                   │
+│  ✓ success · run_0001 · 3.2s              │                   │
+│                                            │                   │
+├────────────────────────────────────────────┴───────────────────┤
+│ > 输入请求...                          [Enter] Run  [Esc] Quit │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-这个布局的重点不是美观，而是：
+- **顶部状态栏**：当前阶段（L0决策 / L1处理 / L0恢复 / 完成）+ 计时
+- **左侧事件流**：按流程顺序实时展示 L0/L1 所有事件，LLM 响应逐块显示
+- **右侧上下文面板**：Artifact Headers 列表 + Run Stats + Active Skill
+- **底部输入栏**：始终可用
 
-> **让你一眼看到 Ethan 这次是如何工作的。**
+## 20.2 事件类型
 
-## 21.2 交互流
+Runtime 通过事件回调向 TUI 发送事件：
 
-### 流程 1：运行一次请求
+```typescript
+type TuiEvent =
+  | { type: “request”; text: string; runId: string }
+  | { type: “headers_loaded”; count: number }
+  | { type: “l0_streaming”; text: string }
+  | { type: “l0_decision”; action: “execute” | “escalate”; artifact_id?: string; reason?: string }
+  | { type: “l1_start”; skill: string }
+  | { type: “l1_tool_call”; round: number; tool: string; summary: string; ms: number }
+  | { type: “l1_report”; summary: string }
+  | { type: “l0_resume”; headersCount: number }
+  | { type: “result”; outcome: string; totalMs: number }
+```
 
-1. 用户输入 request
-2. TUI 调用 L0 主流程
-3. L0 读取 Artifact Headers
-4. TUI 更新 Visible Headers 面板
-5. L0 做出判断
-6. TUI 更新 L0 Decision 面板
-7. 若升级，L1 开始 crafting
-8. TUI 更新 L1 Craft 面板
-9. L0 继续执行
-10. TUI 更新 Final Result 与 Growth / Record 面板
+## 20.3 交互
 
-### 流程 2：人工确认
+- **Enter**：提交请求
+- **Esc / Ctrl+C**：退出
 
-运行结束后，用户可以：
+## 20.4 实现要求
 
-- Accept：确认本次结果与成长合理
-- Reject：标记这次结果或成长存在问题
-- View Record：查看生成的 Run Record / Artifact 文件
+- 用 chalk + 原生 ANSI escape codes（不依赖 Ink/yoga）
+- Alternate screen buffer，退出时恢复
+- 实时 streaming：LLM 响应逐块显示
+- 色标分层：L0=cyan, L1=yellow, Done=green
 
-### 流程 3：Replay
-
-用户触发 Replay Latest：
-
-1. TUI 读取最近一次 run record
-2. 调用 replay 模块
-3. 展示 replay 成功 / failure / drift
-4. 若有 diff，则展示摘要
-
-## 21.3 TUI 与模块的对接方式
-
-### TUI → enter-runtime
-
-TUI 不直接替代 L0，只负责把 request 交给 L0，并订阅 / 接收 L0 的阶段性状态。
-
-也就是说：
-
-- TUI 是展示层
-- L0 才是执行层
-
-### TUI → artifact-registry
-
-TUI 不直接决定使用哪个 Artifact。
-
-它只展示：
-
-- 当前注入给 L0 的 Headers
-- 当前被 L0 选中的 Artifact
-- 运行后新生成的 Artifact
-
-### TUI → craft-engine
-
-TUI 不直接指挥 L1 如何 craft。
-
-它只展示：
-
-- L1 是否被调用
-- L1 用了哪个 Skill
-- L1 产出了什么
-
-### TUI → replay
-
-TUI 可以作为 replay 的触发入口，
-但 replay 的核心逻辑仍在 replay 模块中。
-
-## 21.4 MVP 中 TUI 的实现建议
-
-TUI 应尽量轻，不成为另一个大工程。
-
-推荐实现方式：
-
-- 终端应用（Node/TypeScript 场景可用 Ink、Blessed、或简单 stdout 分区更新）
-- 只做单用户本地运行
-- 不做复杂状态管理
-- 不做过度装饰
-- 只围绕验收节点显示信息
-
-如果实现成本控制优先，甚至可以先从**结构化 CLI 输出 + 少量按键交互**开始，之后再演进成完整 TUI。
-
-## 21.5 TUI 的验收标准
-
-MVP 中 TUI 做到以下程度即可视为通过：
+## 20.5 验收标准
 
 1. 用户可以输入并运行请求
-2. 用户可以看到当前注入的 Artifact Headers
-3. 用户可以看到 L0 的判断结果
-4. 用户可以在升级时看到 L1 的 crafting 结果
-5. 用户可以看到最终结果与运行记录
-6. 用户可以触发至少一次 replay
-7. 用户能明显感知“这次系统有没有成长”
+2. 用户可以实时看到 L0 决策过程（streaming）
+3. 用户可以实时看到 L1 tool calls 和 timing
+4. 用户可以看到 Artifact Headers 和 Run Stats
+5. 全流程闭环可见（L0 → L1 → L0 resume → done）
 
-只要满足以上条件，TUI 就已经完成其 MVP 使命。
+---
+
+# 21. TUI 与模块的对接
+
+### 对接方式
+
+TUI 不直接替代任何模块。它只接收事件并渲染。
+
+- `enter-runtime`：Config 添加 `onEvent` 回调，在各阶段发射事件
+- `craft-engine`：Config 添加 `onEvent` 回调，发射 L1 相关事件
+- `pi-kernel`：改用 `messages.stream()` API，逐 token yield
+
+### 数据流
+
+```text
+User Input → TUI (onRun) → createEnterRuntime({ onEvent: emit })
+                                    ↓
+                              EnterRuntime.run()
+                              ├── onEvent(“request”)
+                              ├── onEvent(“headers_loaded”)
+                              ├── onEvent(“l0_streaming”)  ← kernel streaming
+                              ├── onEvent(“l0_decision”)
+                              ├── CraftEngine.craft({ onEvent: emit })
+                              │     ├── onEvent(“l1_start”)
+                              │     ├── onEvent(“l1_tool_call”) × N
+                              │     └── onEvent(“l1_report”)
+                              ├── onEvent(“l0_resume”)
+                              ├── onEvent(“l0_streaming”)  ← resume streaming
+                              └── onEvent(“result”)
+```
 
 ---
 

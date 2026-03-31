@@ -1,0 +1,13 @@
+{
+  "name": "@ethan-computer/tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "dependencies": {
+    "ink": "^6.8.0",
+    "react": "^19.2.4",
+    "@ethan-computer/protocol-types": "*"
+  }
+}
