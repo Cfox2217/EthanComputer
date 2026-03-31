@@ -14,7 +14,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
-import type { Skill } from "@ethan-computer/protocol-types";
+import type { Skill, TuiEvent } from "@ethan-computer/protocol-types";
 import type { SkillRegistry } from "@ethan-computer/skill-registry";
 import type { ArtifactRegistry } from "@ethan-computer/artifact-registry";
 
@@ -53,6 +53,8 @@ export interface CraftEngineConfig {
   baseUrl?: string;
   /** agentic loop 最大迭代次数 */
   maxIterations?: number;
+  /** TUI 事件回调（可选） */
+  onEvent?: (event: TuiEvent) => void;
 }
 
 export interface CraftEngine {
@@ -335,6 +337,7 @@ async function runAgentLoop(
   model: string,
   baseUrl: string | undefined,
   maxIterations: number,
+  onEvent?: (event: TuiEvent) => void,
 ): Promise<AgentLoopResult> {
   const client = new Anthropic({ apiKey, baseURL: baseUrl });
 
@@ -377,7 +380,24 @@ async function runAgentLoop(
     }
 
     // 有 tool_use → 追加 assistant message，执行工具，继续
-    console.log(`  [L1] round ${i + 1}: ${toolUseBlocks.map(t => t.name).join(", ")}, ${Date.now() - t0}ms`);
+    const elapsed = Date.now() - t0;
+    console.log(`  [L1] round ${i + 1}: ${toolUseBlocks.map(t => t.name).join(", ")}, ${elapsed}ms`);
+
+    for (const tu of toolUseBlocks) {
+      const summary = tu.name === "write_file"
+        ? `write → ${String(tu.input.path).split("/").pop()}`
+        : tu.name === "edit_file"
+          ? `edit → ${String(tu.input.path).split("/").pop()}`
+          : tu.name;
+      onEvent?.({
+        type: "l1_tool_call",
+        round: i + 1,
+        tool: tu.name,
+        summary,
+        ms: elapsed,
+      });
+    }
+
     messages.push({ role: "assistant", content: response.content });
 
     // 执行所有工具调用
@@ -483,7 +503,10 @@ export function createCraftEngine(config: CraftEngineConfig): CraftEngine {
     model,
     baseUrl,
     maxIterations = 10,
+    onEvent,
   } = config;
+
+  const emit = (event: TuiEvent) => onEvent?.(event);
 
   return {
     async craft(req: CraftRequest): Promise<CraftOutput> {
@@ -514,6 +537,8 @@ export function createCraftEngine(config: CraftEngineConfig): CraftEngine {
         }
       }
 
+      emit({ type: "l1_start", skill: targetSkill?.skill_id ?? "(auto)" });
+
       // 3. 构建 system prompt
       const systemPrompt = buildL1SystemPrompt(allSkills, targetSkill, artifactPath, join(artifactsDir, user));
 
@@ -528,10 +553,16 @@ export function createCraftEngine(config: CraftEngineConfig): CraftEngine {
         model,
         baseUrl,
         maxIterations,
+        onEvent,
       );
 
       // 6. 确定 artifact 路径
       const resolvedPath = resolveArtifactPath(writtenFiles, artifactPath);
+
+      // 提取 Craft Summary 中的关键信息
+      const actionMatch = report.match(/Action:\s*(\w+)/);
+      const summary = actionMatch ? actionMatch[1] : "completed";
+      emit({ type: "l1_report", summary });
 
       return {
         report,

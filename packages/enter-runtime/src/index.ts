@@ -19,14 +19,13 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import yaml from "js-yaml";
-import type { Artifact, Upgrade, RunRecord } from "@ethan-computer/protocol-types";
+import type { Artifact, Upgrade, RunRecord, TuiEvent } from "@ethan-computer/protocol-types";
 import type { ArtifactRegistry, ArtifactSummary } from "@ethan-computer/artifact-registry";
 import type { PiKernel } from "@ethan-computer/pi-kernel";
 import type { CraftEngine, CraftOutput } from "@ethan-computer/craft-engine";
 import {
   createSessionRecorder,
   type SessionRecorder,
-  type SessionMessage,
 } from "@ethan-computer/session-store";
 
 // ── System Prompt 构造 ──────────────────────────────────
@@ -162,12 +161,14 @@ async function callL0WithHistory(
   kernel: PiKernel,
   recorder: SessionRecorder,
   systemPrompt: string,
+  onStream?: (text: string) => void,
 ): Promise<string> {
   const messages = recorder.getMessages();
   let llmOutput = "";
   for await (const event of kernel.promptMessages(messages, systemPrompt)) {
     if (event.type === "text_delta") {
-      llmOutput += event.text;
+      llmOutput = event.text;
+      onStream?.(event.text);
     } else if (event.type === "message_end") {
       llmOutput = event.text;
     }
@@ -180,11 +181,13 @@ async function callL0First(
   kernel: PiKernel,
   request: string,
   systemPrompt: string,
+  onStream?: (text: string) => void,
 ): Promise<string> {
   let llmOutput = "";
   for await (const event of kernel.prompt(request, systemPrompt)) {
     if (event.type === "text_delta") {
-      llmOutput += event.text;
+      llmOutput = event.text;
+      onStream?.(event.text);
     } else if (event.type === "message_end") {
       llmOutput = event.text;
     }
@@ -233,6 +236,8 @@ export interface EnterRuntimeConfig {
   craftEngine?: CraftEngine;
   /** 最大升级轮次（默认 1，即最多调用 L1 一次） */
   maxEscalations?: number;
+  /** TUI 事件回调（可选 — 启用后实时发射运行事件） */
+  onEvent?: (event: TuiEvent) => void;
 }
 
 export interface EnterRuntime {
@@ -240,14 +245,19 @@ export interface EnterRuntime {
 }
 
 export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
-  const { user, runsDir, sessionsDir, artifactRegistry, kernel, craftEngine } = config;
+  const { user, runsDir, sessionsDir, artifactRegistry, kernel, craftEngine, onEvent } = config;
   const maxEscalations = craftEngine ? (config.maxEscalations ?? 1) : 0;
+
+  const emit = (event: TuiEvent) => onEvent?.(event);
 
   return {
     async run(request: string) {
+      const t0 = Date.now();
       const runId = generateRunId();
       let craftInfo: EnterCraftInfo | undefined;
       let craftApplied = false;
+
+      emit({ type: "request", text: request, runId });
 
       // ── 创建会话记录器 ────────────────────────────────
       const recorder = await createSessionRecorder({
@@ -257,9 +267,15 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
         metadata: { user },
       });
 
+      // updateHeader 非关键路径，失败不应阻塞主流程
+      const safeUpdateHeader = async (update: { result?: string; artifact?: string; escalated?: boolean; craft_applied?: boolean }) => {
+        try { await safeUpdateHeader(update); } catch { /* best effort */ }
+      };
+
       // ── Round 0: 初始 L0 决策 ──────────────────────
       const summaries = await artifactRegistry.listHeaders(user);
       const systemPrompt = buildL0SystemPrompt(summaries);
+      emit({ type: "headers_loaded", count: summaries.length });
 
       // 记录用户消息
       await recorder.append({
@@ -268,7 +284,10 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
         timestamp: Date.now(),
       });
 
-      const initialOutput = await callL0First(kernel, request, systemPrompt);
+      const initialOutput = await callL0First(
+        kernel, request, systemPrompt,
+        (text) => emit({ type: "l0_streaming", text }),
+      );
 
       // 记录 L0 响应
       await recorder.append({
@@ -279,6 +298,11 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
       });
 
       const initialDecision = parseDecision(initialOutput);
+      emit({
+        type: "l0_decision",
+        action: initialDecision.action,
+        ...(initialDecision.action === "execute" ? { artifact_id: initialDecision.artifact_id } : { reason: initialDecision.reason }),
+      });
 
       // 直接执行
       if (initialDecision.action === "execute") {
@@ -292,7 +316,8 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
           result: "success",
         };
         await writeRunRecord(runsDir, record);
-        await recorder.updateHeader({ result: "success", artifact: initialDecision.artifact_id });
+        emit({ type: "result", outcome: "success", totalMs: Date.now() - t0 });
+        await safeUpdateHeader({ result: "success", artifact: initialDecision.artifact_id });
         return { type: "success", artifact, decision: initialDecision, record };
       }
 
@@ -313,14 +338,12 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
           result: "partial",
         };
         await writeRunRecord(runsDir, record);
-        await recorder.updateHeader({ result: "partial", escalated: true });
+        emit({ type: "result", outcome: "partial", totalMs: Date.now() - t0 });
+        await safeUpdateHeader({ result: "partial", escalated: true });
         return { type: "escalate", upgrade, decision: initialDecision, record };
       }
 
       // 调用 L1 CraftEngine
-      console.log(`[L0] escalate → 调用 L1 CraftEngine`);
-      console.log(`[L0] 原因: ${initialDecision.reason}`);
-
       const craftResult = await craftEngine.craft({
         request,
         problem: initialDecision.reason,
@@ -343,12 +366,13 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
         metadata: { layer: "l1-craft-report", artifact_path: craftResult.artifact_path },
       });
 
-      console.log(`[L0] L1 完成，artifact: ${craftResult.artifact_path}`);
-      console.log(`[L0] 恢复会话，L1 报告已记录...\n`);
-
       // ── L0 恢复会话：从 recorder 获取完整历史 ──
+      emit({ type: "l0_resume", headersCount: updatedSummaries.length });
       const updatedSystemPrompt = buildL0SystemPrompt(updatedSummaries);
-      const resumeOutput = await callL0WithHistory(kernel, recorder, updatedSystemPrompt);
+      const resumeOutput = await callL0WithHistory(
+        kernel, recorder, updatedSystemPrompt,
+        (text) => emit({ type: "l0_streaming", text }),
+      );
 
       // 记录 L0 恢复后的响应
       await recorder.append({
@@ -359,6 +383,11 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
       });
 
       const resumeDecision = parseDecision(resumeOutput);
+      emit({
+        type: "l0_decision",
+        action: resumeDecision.action,
+        ...(resumeDecision.action === "execute" ? { artifact_id: resumeDecision.artifact_id } : { reason: resumeDecision.reason }),
+      });
 
       if (resumeDecision.action === "execute") {
         const artifact = await artifactRegistry.load(user, resumeDecision.artifact_id);
@@ -371,7 +400,8 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
           result: "success",
         };
         await writeRunRecord(runsDir, record);
-        await recorder.updateHeader({ result: "success", craft_applied: true });
+        emit({ type: "result", outcome: "success", totalMs: Date.now() - t0 });
+        await safeUpdateHeader({ result: "success", craft_applied: true });
         return { type: "success", artifact, decision: resumeDecision, record, craft: craftInfo };
       }
 
@@ -391,7 +421,8 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
         result: "partial",
       };
       await writeRunRecord(runsDir, record);
-      await recorder.updateHeader({ result: "partial", craft_applied: true });
+      emit({ type: "result", outcome: "partial", totalMs: Date.now() - t0 });
+      await safeUpdateHeader({ result: "partial", craft_applied: true });
       return { type: "escalate", upgrade, decision: resumeDecision, record, craft: craftInfo };
     },
   };

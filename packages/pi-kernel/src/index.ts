@@ -75,23 +75,23 @@ class DirectLLMKernel implements PiKernel {
       content: m.content,
     }));
 
-    const response = await client.messages.create({
+    let fullText = "";
+
+    const stream = client.messages.stream({
       model: this.config.model,
       max_tokens: 4096,
       system: systemPrompt || undefined,
       messages: apiMessages,
     });
 
-    const text = response.content
-      .filter(
-        (block): block is Extract<(typeof response.content)[number], { type: "text" }> =>
-          block.type === "text",
-      )
-      .map((block) => block.text)
-      .join("");
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        fullText += event.delta.text;
+        yield { type: "text_delta", text: fullText };
+      }
+    }
 
-    yield { type: "text_delta", text };
-    yield { type: "message_end", text };
+    yield { type: "message_end", text: fullText };
     yield { type: "agent_end" };
   }
 
