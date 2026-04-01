@@ -1,8 +1,16 @@
 /**
  * EventStream — 主显示区
  *
- * 核心原则：agent 的每轮推理文本完整显示，不截断，不消失。
- * 按 round 分组：推理文本 → 工具调用 → 下一轮。
+ * 视觉层级：
+ * - Section header (◆) : col 2，各阶段入口
+ * - Section content    : col 6 (header col 2 + marginLeft 4)，推理/工具调用
+ * - Reply (◉)          : col 2，与 section header 同级，紧贴其所属 section
+ * - Result             : col 0，运行结束标记
+ *
+ * 间距规则：
+ * - 大阶段之间（L0→L1, L1→Resume）：section header marginTop=1
+ * - Reply 紧贴所属 section：无额外间距
+ * - 同一阶段内的子块（L1 Craft → 成果）：无间距，视觉归组
  */
 
 import React from "react";
@@ -55,6 +63,7 @@ function RunCards({ state }: { state: RunState }) {
   } = state;
 
   const isActive = phase !== "done" && phase !== "idle";
+  const l0HasContent = l0ReasoningSteps.length > 0 || l0ToolCalls.length > 0;
 
   return (
     <Box flexDirection="column">
@@ -70,31 +79,26 @@ function RunCards({ state }: { state: RunState }) {
         icon="◆" label="L0 · Agent" color="cyan"
         stats={formatDuration(
           l1StartAt
-            ? l1StartAt - startTime                          // 已转交 L1 → 计时到转交点
+            ? l1StartAt - startTime
             : l0ReplyAt
-              ? l0ReplyAt - startTime                        // 未转交，已结束
-              : (startTime && isActive ? Date.now() - startTime : null),  // 进行中
+              ? l0ReplyAt - startTime
+              : (startTime && isActive ? Date.now() - startTime : null),
           l0ToolCalls.length,
         )}
       />
       <Box flexDirection="column" marginLeft={4}>
         <Text color="gray">{headersCount} headers loaded</Text>
-
-        {/* 已完成轮次的推理 + 工具调用，按 round 分组 */}
         <AgentRounds reasoningSteps={l0ReasoningSteps} toolCalls={l0ToolCalls} />
-
-        {/* 当前轮次的实时流式文本 */}
-        {streamingText && isActive && (
-          <Box flexDirection="column" marginTop={1}>
-            <Text color="cyan">▸ </Text>
-            {streamingText.split("\n").map((line, i) => (
-              <Text key={i} color="white">{line}</Text>
-            ))}
-          </Box>
-        )}
       </Box>
 
-      {/* ── L1 Craft ─────────────────────────────────── */}
+      {/* L0 回复：紧贴 section，无间距 */}
+      {!l0ResumeAt && (() => {
+        const text = l0Reply || (streamingText && isActive ? streamingText : null);
+        if (!text) return null;
+        return <ReplyBlock text={text} />;
+      })()}
+
+      {/* ── L1 Craft + 成果（同一阶段，视觉归组）──────── */}
       {l1Skill && (
         <>
           <SectionHeader
@@ -108,39 +112,32 @@ function RunCards({ state }: { state: RunState }) {
             ].join(" │ ")}
           />
           <Box flexDirection="column" marginLeft={4}>
-            {/* 已完成轮次的推理 + 工具调用 */}
             <AgentRounds reasoningSteps={l1ReasoningSteps} toolCalls={l1ToolCalls} />
 
-            {/* 当前轮次的实时流式文本 */}
+            {/* 流式文本 */}
             {l1StreamingText && isActive && phase === "l1-craft" && (
-              <Box flexDirection="column" marginTop={1}>
+              <Box flexDirection="column" marginTop={l1ReasoningSteps.length > 0 || l1ToolCalls.length > 0 ? 1 : 0}>
                 {l1StreamingText.split("\n").map((line, i) => (
-                  <Box key={i}>
-                    <Text color="yellow">▸ </Text>
-                    <Text color="white">{line}</Text>
-                  </Box>
+                  <Text key={i}>{line}</Text>
                 ))}
               </Box>
             )}
-          </Box>
-        </>
-      )}
 
-      {/* ── L1 成果 ──────────────────────────────────── */}
-      {craftResult && (
-        <>
-          <SectionHeader icon="◈" label="L1 · 成果" color="green" />
-          <Box flexDirection="column" marginLeft={4}>
-            <Box>
-              <Text color="green">✓ </Text>
-              <Text bold color="white">{craftResult.summary}</Text>
-              <Text color="gray"> → </Text>
-              <Text color="cyan">{craftResult.artifact_path.split("/").pop()}</Text>
-            </Box>
-            {craftResult.continue_hint && (
-              <Box>
-                <Text color="yellow">→ </Text>
-                <Text color="white">{craftResult.continue_hint}</Text>
+            {/* L1 成果（归入 L1 section，紧贴内容） */}
+            {craftResult && (
+              <Box flexDirection="column" marginTop={1}>
+                <Box>
+                  <Text color="green">✓ </Text>
+                  <Text bold color="white">{craftResult.summary}</Text>
+                  <Text color="gray"> → </Text>
+                  <Text color="cyan">{craftResult.artifact_path.split("/").pop()}</Text>
+                </Box>
+                {craftResult.continue_hint && (
+                  <Box>
+                    <Text color="yellow">→ </Text>
+                    <Text color="white">{craftResult.continue_hint}</Text>
+                  </Box>
+                )}
               </Box>
             )}
           </Box>
@@ -158,28 +155,14 @@ function RunCards({ state }: { state: RunState }) {
           />
           <Box flexDirection="column" marginLeft={4}>
             <Text color="gray">Re-loaded {resumeHeadersCount} headers, continuing…</Text>
-
-            {/* 当前轮次的实时流式文本 */}
-            {l0ResumeStreamingText && isActive && (
-              <Box flexDirection="column" marginTop={1}>
-                {l0ResumeStreamingText.split("\n").map((line, i) => (
-                  <Text key={i} color="white">{line}</Text>
-                ))}
-              </Box>
-            )}
           </Box>
-        </>
-      )}
 
-      {/* ── 回复（仅确认后显示）────────────────────────── */}
-      {l0Reply && (
-        <>
-          <SectionHeader icon="◉" label="回复" color="green" />
-          <Box flexDirection="column" marginLeft={4}>
-            {l0Reply.split("\n").map((line, i) => (
-              <Text key={i}>{line}</Text>
-            ))}
-          </Box>
+          {/* Resume 回复：紧贴 section */}
+          {(() => {
+            const text = l0Reply || (l0ResumeStreamingText && isActive ? l0ResumeStreamingText : null);
+            if (!text) return null;
+            return <ReplyBlock text={text} />;
+          })()}
         </>
       )}
 
@@ -195,7 +178,29 @@ function RunCards({ state }: { state: RunState }) {
   );
 }
 
-// ── Agent Rounds（按 round 分组展示推理 + 工具调用）──────────
+// ── Reply Block ────────────────────────────────────────────
+// col 2 对齐 section header，无顶部间距（紧贴父 section）
+
+function ReplyBlock({ text }: { text: string }) {
+  const lines = text.split("\n");
+  if (lines.length === 0) return null;
+  return (
+    <Box flexDirection="column" marginTop={1} marginLeft={2}>
+      <Box>
+        <Text color="green" bold>◉ </Text>
+        <Text>{lines[0]}</Text>
+      </Box>
+      {lines.slice(1).map((line, i) => (
+        <Box key={i} marginLeft={2}>
+          <Text>{line}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+// ── Agent Rounds ───────────────────────────────────────────
+// 按 round 分组，推理文本 + 工具调用
 
 function AgentRounds({ reasoningSteps, toolCalls }: {
   reasoningSteps: ReasoningStep[];
@@ -203,7 +208,6 @@ function AgentRounds({ reasoningSteps, toolCalls }: {
 }) {
   if (reasoningSteps.length === 0 && toolCalls.length === 0) return null;
 
-  // 合并 reasoning 和 tool calls，按 round 分组
   const rounds = new Map<number, { reasoning?: string; toolCalls: ToolCallRecord[] }>();
 
   for (const step of reasoningSteps) {
@@ -226,12 +230,9 @@ function AgentRounds({ reasoningSteps, toolCalls }: {
       {sorted.map(([roundNum, data]) => (
         <Box key={roundNum} flexDirection="column" marginTop={1}>
           {data.reasoning && (
-            <Box flexDirection="column" marginLeft={1}>
+            <Box flexDirection="column">
               {data.reasoning.split("\n").map((line, i) => (
-                <Text key={i} color="white">
-                  {i === 0 ? `[${roundNum}] ` : "    "}
-                  {line}
-                </Text>
+                <Text key={i} color="white">{line}</Text>
               ))}
             </Box>
           )}
@@ -244,7 +245,7 @@ function AgentRounds({ reasoningSteps, toolCalls }: {
   );
 }
 
-// ── Tool Call Item（中等视觉权重）──────────────────────────
+// ── Tool Call Item ─────────────────────────────────────────
 
 function ToolCallItem({ tool, summary, ms }: {
   tool: string;
@@ -263,7 +264,7 @@ function ToolCallItem({ tool, summary, ms }: {
   );
 }
 
-// ── Section Header ────────────────────────────────────────
+// ── Section Header ─────────────────────────────────────────
 
 interface SectionHeaderProps {
   icon: string;

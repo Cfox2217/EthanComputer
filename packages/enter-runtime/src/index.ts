@@ -295,6 +295,8 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
       // ── 输出最终回复 ───────────────────────────────────
       if (finalText) {
         emit({ type: "l0_reply", text: finalText });
+        // 将最终回复追加到消息历史，确保下一轮对话能看到本轮回复
+        messages.push({ role: "assistant", content: [{ type: "text", text: finalText }] });
       }
 
       const record: RunRecord = {

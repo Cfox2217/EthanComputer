@@ -45,8 +45,8 @@ async function main() {
   const sessionsDir = join(ROOT, "runs", "sessions");
   mkdirSync(sessionsDir, { recursive: true });
 
-  const skillRegistry = createSkillRegistry(join(ROOT, "skills", "local"));
-  const artifactRegistry = createArtifactRegistry(join(ROOT, "artifacts"));
+  const skillRegistry = createSkillRegistry(join(ROOT, "Workspace"), "ethan");
+  const artifactRegistry = createArtifactRegistry(join(ROOT, "Workspace"));
 
   // ── 收集事件 ────────────────────────────────────────
   const events: TuiEvent[] = [];
@@ -100,7 +100,7 @@ async function main() {
   const craftEngine = createCraftEngine({
     skillRegistry,
     artifactRegistry,
-    artifactsDir: join(ROOT, "artifacts"),
+    workspaceDir: join(ROOT, "Workspace"),
     user: "ethan",
     apiKey: API_KEY,
     model: MODEL,

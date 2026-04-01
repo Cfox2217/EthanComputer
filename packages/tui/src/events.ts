@@ -247,15 +247,34 @@ export function applyEvent(state: RunState, event: TuiEvent): RunState {
         l0ResumeStreamingText: "",
       };
 
-    case "result":
+    case "result": {
+      // partial outcome 时兜底保存残留的流式文本
+      let newSteps = state.l0ReasoningSteps;
+      if (!state.l0Reply) {
+        const currentText = state.phase === "l0-resume"
+          ? state.l0ResumeStreamingText
+          : state.streamingText;
+        if (currentText) {
+          const lastToolRound = state.l0ToolCalls.length > 0
+            ? Math.max(...state.l0ToolCalls.map(tc => tc.round || 0))
+            : 0;
+          const lastStepRound = state.l0ReasoningSteps.length > 0
+            ? Math.max(...state.l0ReasoningSteps.map(s => s.round))
+            : 0;
+          const nextRound = Math.max(lastToolRound, lastStepRound) + 1;
+          newSteps = [...state.l0ReasoningSteps, { round: nextRound, text: currentText }];
+        }
+      }
       return {
         ...state,
+        l0ReasoningSteps: newSteps,
         phase: "done",
         outcome: event.outcome,
         totalMs: event.totalMs,
         streamingText: "",
         l0ResumeStreamingText: "",
       };
+    }
 
     default:
       return state;

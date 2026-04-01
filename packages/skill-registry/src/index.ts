@@ -1,8 +1,11 @@
 /**
  * skill-registry — 本地 Skill 读取
  *
- * 从 skills/local/ 目录扫描 SKILL.md 格式文件，
+ * 从 Workspace/<user>/skills/ 目录扫描 SKILL.md 格式文件，
  * 解析 YAML frontmatter + Markdown body，映射为 Skill 类型。
+ *
+ * 接收 workspaceDir（如 "Workspace"），内部按 user 定位：
+ *   workspaceDir/<user>/skills/<skillId>/SKILL.md
  *
  * 标准 SKILL.md frontmatter 只有 name + description。
  * version/scenarios/constraints 从 metadata 或 body 中提取。
@@ -78,7 +81,8 @@ export interface SkillRegistry {
   loadAll(): Promise<Skill[]>;
 }
 
-export function createSkillRegistry(skillsDir: string): SkillRegistry {
+export function createSkillRegistry(workspaceDir: string, user: string): SkillRegistry {
+  const skillsDir = join(workspaceDir, user, "skills");
   return {
     async list() {
       const entries = await readdir(skillsDir, { withFileTypes: true });

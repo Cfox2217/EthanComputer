@@ -68,8 +68,8 @@ async function main() {
   mkdirSync(sessionsDir, { recursive: true });
 
   // ── 构建各层实例 ──────────────────────────────────────
-  const skillRegistry = createSkillRegistry(join(ROOT, "skills", "local"));
-  const artifactRegistry = createArtifactRegistry(join(ROOT, "artifacts"));
+  const skillRegistry = createSkillRegistry(join(ROOT, "Workspace"), "ethan");
+  const artifactRegistry = createArtifactRegistry(join(ROOT, "Workspace"));
 
   const kernel = createPiKernel({
     mode: "direct-llm",
@@ -86,7 +86,7 @@ async function main() {
       const craftEngine = createCraftEngine({
         skillRegistry,
         artifactRegistry,
-        artifactsDir: join(ROOT, "artifacts"),
+        workspaceDir: join(ROOT, "Workspace"),
         user: "ethan",
         apiKey: config.apiKey,
         model: config.model,

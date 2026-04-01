@@ -53,7 +53,7 @@ async function main() {
     baseURL: "https://open.bigmodel.cn/api/anthropic",
   });
 
-  const registry = createArtifactRegistry(join(ROOT, "artifacts"));
+  const registry = createArtifactRegistry(join(ROOT, "Workspace"));
   const summaries = await registry.listHeaders("ethan");
 
   // ── 展示注入的 headers ──

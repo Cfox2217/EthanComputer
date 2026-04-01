@@ -3,8 +3,8 @@
 > 每次完成实际任务后都要更新。
 
 ## Current
-- **Current Focus**: Phase 4 ✓ — Agent 决策过程完整展示（L0 + L1 reasoning steps 累积不丢失）
-- **Last Updated**: 2026-04-01 16:00 GMT+08:00
+- **Current Focus**: Phase 4 ✓ — TUI 视觉统一 + Workspace 目录结构
+- **Last Updated**: 2026-04-01 18:30 GMT+08:00
 - **Blockers**: none
 
 ## 开发路线（参考 CraftAgent 双内核架构）
@@ -88,6 +88,33 @@
 - **补充参考**: `Reference/openclaw-main/`（全面但复杂）
 
 ## Log
+### [2026-04-01 18:30 GMT+08:00] TUI 视觉统一 + 文档规范 + 对话上下文修复
+- **Why**: TUI 显示不统一——回复前缀会跳变、间距不一致、不同阶段样式混乱；L0 回复未加入后续对话上下文
+- **Changed**:
+  - `packages/tui/src/EventStream.tsx`: 移除独立"回复"section，回复归入所属 L0/Resume section；统一三级缩进（col 0/2/4-6）；所有 col 2 元素 `marginTop=1`；Box 行布局替代内联空格（修复 Unicode 前缀对齐）；回复续行严格缩进不超出标识符
+  - `packages/tui/src/events.ts`: `result` handler 兜底保存残留 streaming 文本到 reasoning steps（partial outcome 场景）
+  - `packages/enter-runtime/src/index.ts`: 最终回复追加到 messages 数组，确保多轮对话上下文完整
+  - `CLAUDE.md`: 新增 §16 设计原则（统一与归一、第一性原理）
+  - `HANDLE_SPEC.md`: 新增 §20.4.1 视觉设计规范（缩进层级、间距规则、视觉标识符、文本渲染、阶段归组）
+- **Architecture**: 三级视觉层级 + 统一间距规则成为 TUI 开发的强制规范，写入 HANDLE_SPEC.md
+- **Validated**: 全部包 tsc --noEmit 编译通过
+- **Next**: Phase 5 Run Record & Replay（Step 8）
+
+### [2026-04-01 17:30 GMT+08:00] Workspace 目录结构重组
+- **Why**: 引入 Workspace 层级，为多 workspace 系统做准备。Skills 和 Artifacts 统一归属到用户 workspace 下
+- **Changed**:
+  - 新增 `Workspace/Ethan/` 目录（以用户命名的 workspace）
+  - `artifacts/ethan/` → `Workspace/Ethan/artifacts/`（去掉 user 子目录层，直接在 workspace 下按类型组织）
+  - `skills/local/` → `Workspace/Ethan/skills/`
+  - `artifact-registry`: 参数从 `artifactsDir` 改为 `workspaceDir`，内部路径从 `join(dir, user)` 改为 `join(dir, user, "artifacts")`
+  - `skill-registry`: 参数从 `skillsDir` 改为 `workspaceDir` + `user`，内部路径从直接扫描改为 `join(workspaceDir, user, "skills")`
+  - `craft-engine`: 参数从 `artifactsDir` 改为 `workspaceDir`，内部路径同步更新
+  - 所有脚本（run-mvp, verify-*, debug-api）传入路径同步更新
+  - `.gitignore` 新增 `Workspace/`
+- **Architecture**: `Workspace/<user>/` 是一个用户的完整工作空间，artifacts 和 skills 都归属其下。Registry 包接收 `workspaceDir`，内部按 user 分子目录
+- **Validated**: 全部包 tsc --noEmit 编译通过
+- **Next**: Phase 5 Run Record & Replay（Step 8）；或自定义系统提示词功能
+
 ### [2026-04-01 16:00 GMT+08:00] Agent 推理过程完整保留 + L0/L1 统一展示
 - **Why**: 用户反馈 L0 决策过程完全看不到，只有 L1 有。根本原因：tool_call 事件清空 streamingText 时没有保存到 reasoning steps
 - **Root cause**: 

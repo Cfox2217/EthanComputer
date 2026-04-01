@@ -41,8 +41,8 @@ export interface CraftEngineConfig {
   skillRegistry: SkillRegistry;
   /** Artifact registry 实例 */
   artifactRegistry: ArtifactRegistry;
-  /** artifacts 根目录（用于确定文件路径） */
-  artifactsDir: string;
+  /** workspace 根目录（如 "Workspace"） */
+  workspaceDir: string;
   /** 用户标识 */
   user: string;
   /** Anthropic API key */
@@ -537,7 +537,7 @@ export function createCraftEngine(config: CraftEngineConfig): CraftEngine {
   const {
     skillRegistry,
     artifactRegistry,
-    artifactsDir,
+    workspaceDir,
     user,
     apiKey,
     model,
@@ -559,7 +559,7 @@ export function createCraftEngine(config: CraftEngineConfig): CraftEngine {
 
       if (req.current_artifact_id) {
         // 已有 artifact → 加载它，回溯到源 Skill
-        const userDir = join(artifactsDir, user);
+        const userDir = join(workspaceDir, user, "artifacts");
         artifactPath = join(userDir, `${req.current_artifact_id}.md`);
 
         try {
@@ -580,7 +580,7 @@ export function createCraftEngine(config: CraftEngineConfig): CraftEngine {
       emit({ type: "l1_start", skill: targetSkill?.skill_id ?? "(auto)" });
 
       // 3. 构建 system prompt
-      const systemPrompt = buildL1SystemPrompt(allSkills, targetSkill, artifactPath, join(artifactsDir, user));
+      const systemPrompt = buildL1SystemPrompt(allSkills, targetSkill, artifactPath, join(workspaceDir, user, "artifacts"));
 
       // 4. 构建 user message（已有 artifact 时预注入内容）
       const userMessage = await buildUserMessage(req, artifactPath);

@@ -1,8 +1,13 @@
 /**
  * artifact-registry — 本地 Artifact 读取与保存
  *
- * 从 artifacts/<user>/ 目录扫描 .md 文件，
+ * artifact-registry — 本地 Artifact 读取与保存
+ *
+ * 从 Workspace/<user>/artifacts/ 目录扫描 .md 文件，
  * 解析 YAML frontmatter + Markdown body，映射为 Artifact 类型。
+ *
+ * 接收 workspaceDir（如 "Workspace"），内部按 user 分子目录：
+ *   workspaceDir/<user>/artifacts/*.md
  *
  * MVP 支持三层操作：
  * 1. listHeaders — 加载所有 Artifact Header（供 L0 快速判断）
@@ -146,10 +151,10 @@ export interface ArtifactRegistry {
   save(user: string, artifact: Artifact): Promise<void>;
 }
 
-export function createArtifactRegistry(artifactsDir: string): ArtifactRegistry {
+export function createArtifactRegistry(workspaceDir: string): ArtifactRegistry {
   return {
     async listHeaders(user: string) {
-      const userDir = join(artifactsDir, user);
+      const userDir = join(workspaceDir, user, "artifacts");
       const entries = await readdir(userDir);
       const summaries: ArtifactSummary[] = [];
 
@@ -167,7 +172,7 @@ export function createArtifactRegistry(artifactsDir: string): ArtifactRegistry {
     },
 
     async load(user: string, artifactId: string) {
-      const userDir = join(artifactsDir, user);
+      const userDir = join(workspaceDir, user, "artifacts");
       const fileName = `${artifactId}.md`;
       const raw = await readFile(join(userDir, fileName), "utf-8");
       const { data, body } = parseFrontmatter(raw);
@@ -180,7 +185,7 @@ export function createArtifactRegistry(artifactsDir: string): ArtifactRegistry {
     },
 
     async save(user: string, artifact: Artifact) {
-      const userDir = join(artifactsDir, user);
+      const userDir = join(workspaceDir, user, "artifacts");
       await mkdir(userDir, { recursive: true });
 
       const frontmatter: Record<string, unknown> = {

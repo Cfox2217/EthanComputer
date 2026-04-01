@@ -1031,10 +1031,53 @@ type TuiEvent =
 
 ## 20.4 实现要求
 
-- 用 chalk + 原生 ANSI escape codes（不依赖 Ink/yoga）
-- Alternate screen buffer，退出时恢复
+- 用 Ink（React for CLI）组件化渲染
 - 实时 streaming：LLM 响应逐块显示
 - 色标分层：L0=cyan, L1=yellow, Done=green
+
+### 20.4.1 视觉设计规范
+
+修改 TUI 渲染代码时必须遵守以下规则。
+
+**缩进层级（三级）**
+
+| 层级 | 列位置 | 元素 | 示例 |
+|------|--------|------|------|
+| L0 | col 0 | 请求、结果 | `> request`、`✓ success` |
+| L1 | col 2 | section header、reply 前缀 | `◆ L0 · Agent`、`◉ reply` |
+| L2 | col 4–6 | section 内容 | 推理文本、工具调用、metadata |
+
+**间距规则**
+
+- L1 元素（`◆` section header、`◉` reply、`✓` result）统一 `marginTop=1`
+- L2 元素（section 内容）紧贴其所属 L1 标记，无额外间距
+- AgentRounds 轮次之间 `marginTop=1`
+- 不同 run 之间用 `╌` 分隔线 + `marginY=1`
+- **核心原则：相同列位置的元素必须有相同的上方间距**
+
+**视觉标识符**
+
+| 标识符 | 颜色 | 用途 |
+|--------|------|------|
+| `◆` | section 专用色 | 阶段标记（L0=cyan, L1=yellow） |
+| `◉` | green bold | 最终回复 |
+| `⚡` | yellow | 工具调用 |
+| `✓` / `⚠` | green / yellow | 运行结果 |
+| `>` | green bold | 用户请求 |
+
+**文本渲染**
+
+- agent 所有输出（推理、流式、回复）统一在同一 section 内渲染，不跳跃
+- tool_call 触发时文本归档到 AgentRounds，新文本在底部继续生长
+- 不区分"推理"和"回复"——一切都是 agent 的输出
+- 流式文本无特殊前缀，与确认文本使用相同样式
+- 回复续行严格缩进，不超出前缀标识符的文本起始列
+
+**阶段归组**
+
+- L1 Craft + L1 成果在同一 `marginLeft=4` Box 内，无额外 section header 分隔
+- L0 初始阶段的回复归 L0 section
+- L0 恢复阶段的回复归 Resume section
 
 ## 20.5 验收标准
 

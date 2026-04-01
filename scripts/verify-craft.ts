@@ -25,13 +25,13 @@ async function main() {
     process.exit(1);
   }
 
-  const skillRegistry = createSkillRegistry(join(ROOT, "skills", "local"));
-  const artifactRegistry = createArtifactRegistry(join(ROOT, "artifacts"));
+  const skillRegistry = createSkillRegistry(join(ROOT, "Workspace"), "ethan");
+  const artifactRegistry = createArtifactRegistry(join(ROOT, "Workspace"));
 
   const engine = createCraftEngine({
     skillRegistry,
     artifactRegistry,
-    artifactsDir: join(ROOT, "artifacts"),
+    workspaceDir: join(ROOT, "Workspace"),
     user: "ethan",
     apiKey: API_KEY,
     model: MODEL,

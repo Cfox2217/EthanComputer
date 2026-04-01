@@ -23,7 +23,7 @@ async function main() {
   await kernel.start();
 
   // 2. 创建 registry 和 runtime
-  const artifactRegistry = createArtifactRegistry(join(ROOT, "artifacts"));
+  const artifactRegistry = createArtifactRegistry(join(ROOT, "Workspace"));
   const enter = createEnterRuntime({
     user: "ethan",
     runsDir: join(ROOT, "runs"),
