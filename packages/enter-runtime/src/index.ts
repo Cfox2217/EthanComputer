@@ -128,6 +128,8 @@ export interface EnterSuccess {
   artifact: Artifact | null;
   record: RunRecord;
   craft?: EnterCraftInfo;
+  /** 本次 run 的完整消息历史（含初始消息 + agent loop 所有轮次） */
+  messages: ChatMessage[];
 }
 
 export interface EnterEscalate {
@@ -135,6 +137,7 @@ export interface EnterEscalate {
   upgrade: Upgrade;
   record: RunRecord;
   craft?: EnterCraftInfo;
+  messages: ChatMessage[];
 }
 
 export type EnterResult = EnterSuccess | EnterEscalate;
@@ -154,7 +157,7 @@ export interface EnterRuntimeConfig {
 }
 
 export interface EnterRuntime {
-  run(request: string): Promise<EnterResult>;
+  run(request: string, priorMessages?: ChatMessage[]): Promise<EnterResult>;
 }
 
 export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
@@ -165,7 +168,7 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
   const emit = (event: TuiEvent) => onEvent?.(event);
 
   return {
-    async run(request: string) {
+    async run(request: string, priorMessages?: ChatMessage[]) {
       const t0 = Date.now();
       const runId = generateRunId();
       let craftInfo: EnterCraftInfo | undefined;
@@ -194,7 +197,10 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
       // ── 构建初始消息 ───────────────────────────────────
       await recorder.append({ role: "user", content: request, timestamp: Date.now() });
 
-      const messages: ChatMessage[] = [{ role: "user", content: request }];
+      const messages: ChatMessage[] = [
+      ...(priorMessages || []),
+      { role: "user", content: request },
+    ];
       let escalationCount = 0;
       let finalText = "";
 
@@ -205,12 +211,30 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
         const response = await kernel.callWithTools(
           messages, systemPrompt, L0_TOOLS,
           (text) => emit({ type: "l0_streaming", text }),
+          (text) => emit({ type: "l0_thinking", text }),
         );
 
         // 没有 tool call → agent 给出了最终回复
         if (response.stopReason !== "tool_use" || response.toolCalls.length === 0) {
           finalText = response.text;
           break;
+        }
+
+        // 保存 agent 本轮推理文本
+        // 模型可能输出文本，也可能直接调用工具不给文本
+        // fallback: 从 tool call 的 input 参数提取决策理由
+        let reasoning = response.text || "";
+        if (!reasoning) {
+          for (const tc of response.toolCalls) {
+            if (tc.name === "escalate" && tc.input.reason) {
+              reasoning = String(tc.input.reason);
+            } else if (tc.name === "load_artifact" && tc.input.artifact_id) {
+              reasoning = `加载 artifact: ${tc.input.artifact_id}`;
+            }
+          }
+        }
+        if (reasoning) {
+          emit({ type: "l0_agent_reasoning", round: i + 1, text: reasoning });
         }
 
         // 处理 tool calls
@@ -232,6 +256,7 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
 
           emit({
             type: "l0_tool_call",
+            round: i + 1,
             tool: tc.name,
             summary: result.summary,
             ms: elapsed,
@@ -286,7 +311,7 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
 
       if (finalText) {
         const artifact = usedArtifact ? await artifactRegistry.load(user, usedArtifact).catch(() => null) : null;
-        return { type: "success", artifact, record, craft: craftInfo };
+        return { type: "success", artifact, record, craft: craftInfo, messages };
       }
 
       return {
@@ -294,6 +319,7 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
         upgrade: { request, current_artifact: usedArtifact, why_not_enough: "L0 agent loop exhausted without final reply", known_facts: {} },
         record,
         craft: craftInfo,
+        messages,
       };
     },
   };

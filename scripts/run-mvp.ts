@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { createSkillRegistry } from "@ethan-computer/skill-registry";
 import { createArtifactRegistry } from "@ethan-computer/artifact-registry";
-import { createPiKernel } from "@ethan-computer/pi-kernel";
+import { createPiKernel, type ChatMessage } from "@ethan-computer/pi-kernel";
 import { createCraftEngine } from "@ethan-computer/craft-engine";
 import { createEnterRuntime } from "@ethan-computer/enter-runtime";
 import { startTui } from "@ethan-computer/tui";
@@ -79,6 +79,8 @@ async function main() {
   });
 
   // ── 启动 TUI ──────────────────────────────────────────
+  let conversationMessages: ChatMessage[] = [];
+
   const { emit, waitUntilExit } = startTui({
     onRun: async (request: string) => {
       const craftEngine = createCraftEngine({
@@ -104,7 +106,8 @@ async function main() {
         onEvent: emit,
       });
 
-      await runtime.run(request);
+      const result = await runtime.run(request, conversationMessages);
+      conversationMessages = result.messages;
     },
   });
 

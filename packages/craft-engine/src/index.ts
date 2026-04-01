@@ -347,7 +347,14 @@ async function runAgentLoop(
 
   for (let i = 0; i < maxIterations; i++) {
     const t0 = Date.now();
-    const response = await client.messages.create({
+
+    // ── 流式调用 ──────────────────────────────────────
+    let text = "";
+    let thinkingText = "";
+    const toolCalls: { id: string; name: string; input: Record<string, unknown> }[] = [];
+    let currentTool: { id: string; name: string; input: string } | null = null;
+
+    const stream = client.messages.stream({
       model,
       max_tokens: 4096,
       system: systemPrompt,
@@ -355,32 +362,54 @@ async function runAgentLoop(
       tools: TOOLS as Anthropic.Tool[],
     });
 
-    // 分析回复内容
-    const toolUseBlocks: ToolUseBlock[] = [];
-    const textParts: string[] = [];
-
-    for (const block of response.content) {
-      if (block.type === "text") {
-        textParts.push(block.text);
-      } else if (block.type === "tool_use") {
-        toolUseBlocks.push({
-          type: "tool_use",
-          id: block.id,
-          name: block.name,
-          input: block.input as Record<string, unknown>,
-        });
+    for await (const event of stream) {
+      if (event.type === "content_block_start") {
+        if (event.content_block.type === "tool_use") {
+          currentTool = {
+            id: event.content_block.id,
+            name: event.content_block.name,
+            input: "",
+          };
+        }
+      }
+      if (event.type === "content_block_delta") {
+        if (event.delta.type === "thinking_delta") {
+          thinkingText += (event.delta as { type: "thinking_delta"; thinking: string }).thinking;
+          onEvent?.({ type: "l1_thinking", text: thinkingText });
+        }
+        if (event.delta.type === "text_delta") {
+          text += event.delta.text;
+          onEvent?.({ type: "l1_streaming", text });
+        }
+        if (event.delta.type === "input_json_delta" && currentTool) {
+          currentTool.input += event.delta.partial_json;
+        }
+      }
+      if (event.type === "content_block_stop" && currentTool) {
+        let parsed: Record<string, unknown> = {};
+        try { parsed = JSON.parse(currentTool.input || "{}"); } catch { /* empty */ }
+        toolCalls.push({ id: currentTool.id, name: currentTool.name, input: parsed });
+        currentTool = null;
       }
     }
 
-    // 如果没有 tool_use → agent 完成了，返回文本
+    const elapsed = Date.now() - t0;
+
+    // ── 分析回复 ──────────────────────────────────────
+    const toolUseBlocks: ToolUseBlock[] = toolCalls.map(tc => ({
+      type: "tool_use" as const,
+      id: tc.id,
+      name: tc.name,
+      input: tc.input,
+    }));
+
+    // 如果没有 tool_use → agent 完成了
     if (toolUseBlocks.length === 0) {
-      finalText = textParts.join("\n");
-      console.log(`  [L1] round ${i + 1}: text response, ${Date.now() - t0}ms`);
+      finalText = text;
+      console.log(`  [L1] round ${i + 1}: text response, ${elapsed}ms`);
       break;
     }
 
-    // 有 tool_use → 追加 assistant message，执行工具，继续
-    const elapsed = Date.now() - t0;
     console.log(`  [L1] round ${i + 1}: ${toolUseBlocks.map(t => t.name).join(", ")}, ${elapsed}ms`);
 
     for (const tu of toolUseBlocks) {
@@ -398,14 +427,26 @@ async function runAgentLoop(
       });
     }
 
-    messages.push({ role: "assistant", content: response.content });
+    // 构建 assistant content（text + tool_use blocks）
+    const assistantContent: Anthropic.ContentBlockParam[] = [];
+    if (text) {
+      assistantContent.push({ type: "text", text });
+    }
+    for (const tc of toolCalls) {
+      assistantContent.push({
+        type: "tool_use",
+        id: tc.id,
+        name: tc.name,
+        input: tc.input,
+      });
+    }
+    messages.push({ role: "assistant", content: assistantContent });
 
     // 执行所有工具调用
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const tu of toolUseBlocks) {
       try {
         const result = await executeTool(tu.name, tu.input);
-        // 跟踪写入/修改的路径
         if ((tu.name === "write_file" || tu.name === "edit_file") && typeof tu.input.path === "string") {
           writtenFiles.push(tu.input.path);
         }
@@ -426,9 +467,8 @@ async function runAgentLoop(
 
     messages.push({ role: "user", content: toolResults });
 
-    // 保存最后一段文本（agent 可能在 tool_use 前有文本输出）
-    if (textParts.length > 0) {
-      finalText = textParts.join("\n");
+    if (text) {
+      finalText = text;
     }
   }
 
@@ -563,6 +603,16 @@ export function createCraftEngine(config: CraftEngineConfig): CraftEngine {
       const actionMatch = report.match(/Action:\s*(\w+)/);
       const summary = actionMatch ? actionMatch[1] : "completed";
       emit({ type: "l1_report", summary });
+
+      // 提取 continue hint
+      const continueMatch = report.match(/How L0 should continue\s*\n\s*-\s*(.+)/);
+      const continueHint = continueMatch ? continueMatch[1].trim() : "";
+      emit({
+        type: "l1_craft_result",
+        artifact_path: resolvedPath,
+        summary,
+        continue_hint: continueHint,
+      });
 
       return {
         report,

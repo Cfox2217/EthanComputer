@@ -3,8 +3,8 @@
 > 每次完成实际任务后都要更新。
 
 ## Current
-- **Current Focus**: Phase 4 ✓ — TUI Debug Console 完成
-- **Last Updated**: 2026-03-31 01:20 GMT+08:00
+- **Current Focus**: Phase 4 ✓ — Agent 决策过程完整展示（L0 + L1 reasoning steps 累积不丢失）
+- **Last Updated**: 2026-04-01 16:00 GMT+08:00
 - **Blockers**: none
 
 ## 开发路线（参考 CraftAgent 双内核架构）
@@ -57,6 +57,13 @@
   - tui 包：chalk + ANSI escape codes，alternate screen buffer
   - 左栏：卡片式事件流（L0/L1/Resume/Done）；右栏：Artifact Headers + Run Stats
 - [x] Step 7: 集成脚本（run-mvp.ts）
+- [x] Step 7.5: TUI 流式思考 + L1 成果展示
+  - pi-kernel: 新增 ThinkingDeltaEvent，callLLM/callWithTools 捕获 thinking_delta
+  - protocol-types: 新增 l0_thinking, l1_thinking, l1_streaming, l1_craft_result 事件
+  - enter-runtime: 透传 L0 思考过程到 TUI
+  - craft-engine: 从 create 改为 stream，捕获 thinking/text delta，解析 craft report 发射 l1_craft_result
+  - tui: ThinkingBlock 组件（灰色 dim + 左竖线）、CraftResultSection（artifact 路径 + 继续建议）
+  - 视觉层级：回复 > L1 成果 > section headers / 工具调用 > 思考过程
 
 ### Phase 5：Run Record & Replay
 - [ ] Step 8: 创建 replay 包（记录 + 回放 + 差异比较）
@@ -73,13 +80,80 @@
 - tui: 当前用 chalk + ANSI，不支持复杂交互（滚动、选中、tab 切换），后续如需更好体验考虑 pi-tui 或 blessed
 - tui: streaming 时每次 text_delta 全量重绘，高频率 streaming 时可能闪烁，后续可优化为增量渲染
 - pi-kernel: streaming 使用 Anthropic SDK 的 stream() API，需确认智谱兼容端点支持 SSE
+- pi-kernel: 已添加 thinking 配置参数，但当前使用的 GLM-5.1 不支持 extended thinking（仅 GLM-5/4.7/4.5/4.6 支持），如需思考能力需切换模型
+- tui: ThinkingBlock 全量显示不截断，思考内容很多时可能占大量屏幕空间
 
 ## 参考项目
 - **一等参考**: `Reference/craft-agents-oss-main/`（双内核 Pi + Claude Agent SDK）
 - **补充参考**: `Reference/openclaw-main/`（全面但复杂）
 
 ## Log
-### [2026-03-31 01:20 GMT+08:00] Phase 4 完成：TUI Debug Console
+### [2026-04-01 16:00 GMT+08:00] Agent 推理过程完整保留 + L0/L1 统一展示
+- **Why**: 用户反馈 L0 决策过程完全看不到，只有 L1 有。根本原因：tool_call 事件清空 streamingText 时没有保存到 reasoning steps
+- **Root cause**: 
+  1. `l0_tool_call` 清空 `streamingText` 时文本丢失（没有先保存）
+  2. `l1_tool_call` 同样清空 `l1StreamingText` 导致中间轮次文本丢失
+  3. `l0_agent_reasoning` 事件依赖 `response.text` 非空，某些模型不产出文本时该事件不触发
+- **Changed**:
+  - `events.ts`: 彻底重写事件处理。`l0_tool_call` 先保存 streamingText 到 `l0ReasoningSteps` 再清空；`l1_tool_call` 先保存到 `l1ReasoningSteps`；`l1_report` 保存最后的 craft report 文本。`l0_decision` 不再清空 streamingText。去重：同 round 不重复添加
+  - `EventStream.tsx`: L1 也使用 `AgentRounds` 组件展示推理 + 工具调用。L0 和 L1 都全量显示不截断。回复 section 只显示确认后的 l0Reply
+  - 移除 `l0ThinkingText`、`l1ThinkingText`、`l0ResumeThinkingText` 字段（GLM-5.1 不支持 extended thinking，暂时无用）
+- **Architecture**: streaming 文本在清空前必须先保存到 reasoning steps，确保 agent 完整决策链始终可见
+- **Validated**: 全部包 tsc --noEmit 编译通过
+- **Next**: Phase 5 Run Record & Replay（Step 8）
+
+### [2026-04-01 15:00 GMT+08:00] Agent 推理过程展示
+- **Why**: 用户需要看到 agent 的决策链——每轮循环为什么调用工具、看到了什么、下一步怎么想。不是 API 层的 extended thinking，而是 agent loop 每轮迭代的推理文本
+- **Changed**:
+  - `packages/protocol-types/src/index.ts`: 新增 `l0_agent_reasoning` 事件；`l0_tool_call` 新增 `round` 字段
+  - `packages/enter-runtime/src/index.ts`: 每轮 tool-calling 迭代后 emit `l0_agent_reasoning`（round + 推理文本）；`l0_tool_call` emit 添加 round
+  - `packages/tui/src/events.ts`: 新增 `l0ReasoningSteps` 字段和 `ReasoningStep` 类型；`l0_tool_call` handler 保存 round
+  - `packages/tui/src/EventStream.tsx`: 新增 `AgentRounds` 组件，按 round 合并推理文本 + 工具调用，分组展示
+- **Architecture**: Agent 每轮迭代的 `response.text`（模型在调用工具时的推理说明）作为推理过程保存，按 round 分组展示。推理和工具调用通过 round number 关联
+- **Validated**: 核心包 tsc --noEmit 编译通过
+- **Next**: Phase 5 Run Record & Replay（Step 8）
+
+### [2026-04-01 14:00 GMT+08:00] TUI thinking 全量显示 + 回复流式打印 + thinking 参数支持
+- **Why**: 用户要求：1) 思考过程不折叠不截断，完整显示；2) 正式回复需要流式打印在回复区域；3) 发现 GLM-5.1 不支持 extended thinking
+- **Root cause**: GLM-5.1 的 reasoning mode 默认为 none，所有内容通过 text_delta 输出，不存在 thinking_delta。所谓"思考变成回复"实际上是 text_delta（即回复本身）被错误地渲染为思考样式
+- **Changed**:
+  - `packages/tui/src/EventStream.tsx`: ThinkingBlock 全量显示（移除 3 行截断和 70 字符截断）；移除"思考中…"假占位符；回复区域改为流式打印（text_delta 直接在回复 section 显示，带 "(streaming)" 标记）；移除 ReplyPreview 组件；L1 流式文本全量显示
+  - `packages/pi-kernel/src/index.ts`: 新增 `thinking` 配置参数（`{ type: "enabled", budget_tokens: N }`），传入 Anthropic stream 调用，为后续切换到思考模型做准备
+- **Architecture decisions**:
+  - 回复区域改为 IIFE 内联计算：优先显示 l0Reply（确认），其次显示当前 phase 的 streamingText（流式）
+  - ThinkingBlock 只在有真实 thinking_delta 内容时显示，不再显示假占位符
+  - thinking 参数是 opt-in，不配置时不传给 API（避免不支持模型的兼容性问题）
+- **Validated**: 核心包 tsc --noEmit 编译通过
+- **Next**: Phase 5 Run Record & Replay（Step 8 replay 包）；或切换到支持 thinking 的模型（GLM-5/4.7）验证思考流式显示
+
+### [2026-04-01 10:00 GMT+08:00] 修复 thinking 与 reply 混淆
+- **Why**: L0 resume 阶段的思考过程和回复被混淆——streamingText（text_delta，模型实际输出）被渲染成灰色 dim 看起来像思考，然后突然变成正式回复。同时 resume 阶段的 l0_thinking 事件写入 l0ThinkingText 但 resume section 读 l0ResumeThinkingText（从未更新）
+- **Root causes**:
+  1. streamingText（text_delta）用灰色 dim 渲染，视觉上等同于 thinking
+  2. l0_thinking 事件在 resume 阶段未路由到 l0ResumeThinkingText
+  3. l1StreamingText 也用灰色 dim 渲染
+- **Changed**:
+  - `packages/tui/src/events.ts`: applyEvent 根据 phase 路由 l0_thinking/l0_streaming 到 resume 专用字段（l0ResumeThinkingText/l0ResumeStreamingText）；新增 l0ResumeStreamingText 字段
+  - `packages/tui/src/EventStream.tsx`: 彻底重构渲染逻辑——ThinkingBlock（灰色 dim + ┃）只用于 thinking_delta；ReplyPreview（白色正常权重）用于 text_delta；L1 streaming text 用黄色 ▸ 前缀区分
+- **Architecture decisions**: 借鉴 Gemini CLI ThinkingMessage vs GeminiMessage 模式——thinking 和 reply 是不同类型的内容，用不同组件渲染，不同视觉权重
+- **Validated**: 核心包 tsc --noEmit 编译通过
+- **Next**: Phase 5 Run Record & Replay（Step 8 replay 包）
+
+### [2026-03-31 16:00 GMT+08:00] Step 7.5 完成：TUI 流式思考 + L1 成果展示
+- **Why**: 需要实时展示 L0/L1 的思考过程、工具调用、L1 craft 成果和继续建议，让用户能观察 agent 的推理链路
+- **Changed**:
+  - `packages/pi-kernel/src/protocol.ts`: 新增 `ThinkingDeltaEvent` 类型
+  - `packages/pi-kernel/src/index.ts`: `callLLM`/`callWithTools` 捕获 `thinking_delta` 事件，新增 `onThinking` 回调
+  - `packages/protocol-types/src/index.ts`: TuiEvent 新增 `l0_thinking`, `l1_thinking`, `l1_streaming`, `l1_craft_result`
+  - `packages/enter-runtime/src/index.ts`: 透传 `onThinking` 回调
+  - `packages/craft-engine/src/index.ts`: L1 从 `create` 改为 `stream`，流式发射 thinking/text/tool events，解析 craft report 发射 `l1_craft_result`
+  - `packages/tui/src/events.ts`: RunState 新增 thinking/streaming/craftResult 字段
+  - `packages/tui/src/EventStream.tsx`: ThinkingBlock（灰色 dim + 左竖线）、CraftResultSection（artifact 路径 + 继续建议）、视觉层级优化
+- **Tech debt**:
+  - L0 恢复阶段的 thinking 目前复用 `l0_thinking` 事件但需要在 events.ts 中单独跟踪（当前 l0_resume 阶段的 thinking 在 l0ResumeThinkingText 中但 enter-runtime 尚未区分 resume 阶段的 thinking 事件）
+- **Files**: packages/pi-kernel/src/protocol.ts, packages/pi-kernel/src/index.ts, packages/protocol-types/src/index.ts, packages/enter-runtime/src/index.ts, packages/craft-engine/src/index.ts, packages/tui/src/events.ts, packages/tui/src/EventStream.tsx
+- **Validated**: 核心包 tsc --noEmit 编译通过
+- **Next**: Phase 5 Run Record & Replay（Step 8 replay 包）
 - **Why**: 需要实时观察各模块（L0/L1/Kernel）的响应和处理，用于 debug 和后续开发
 - **Changed**:
   - 新增 `packages/tui/`（chalk + ANSI escape codes，左右双栏实时 Debug Console）

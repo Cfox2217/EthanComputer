@@ -7,6 +7,11 @@
 
 // ── Agent 事件类型 ──────────────────────────────────────────
 
+export interface ThinkingDeltaEvent {
+  type: "thinking_delta";
+  text: string;
+}
+
 export interface TextDeltaEvent {
   type: "text_delta";
   text: string;
@@ -22,6 +27,7 @@ export interface AgentEndEvent {
 }
 
 export type AgentEvent =
+  | ThinkingDeltaEvent
   | TextDeltaEvent
   | MessageEndEvent
   | AgentEndEvent;

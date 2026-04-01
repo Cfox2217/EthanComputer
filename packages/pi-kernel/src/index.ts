@@ -8,6 +8,7 @@
 
 export type {
   AgentEvent,
+  ThinkingDeltaEvent,
   ChatMessage,
   ToolDef,
   ToolCall,
@@ -36,6 +37,7 @@ export interface PiKernel {
     systemPrompt: string,
     tools: ToolDef[],
     onText?: (text: string) => void,
+    onThinking?: (text: string) => void,
   ): Promise<LLMResponse>;
   stop(): Promise<void>;
 }
@@ -47,6 +49,8 @@ export interface PiKernelConfig {
   baseUrl?: string;
   piServerEntry?: string;
   cwd?: string;
+  /** 启用 extended thinking（仅部分模型支持，如 GLM-5, GLM-4.7） */
+  thinking?: { type: "enabled"; budget_tokens: number } | { type: "disabled" };
 }
 
 export function createPiKernel(config: PiKernelConfig): PiKernel {
@@ -93,17 +97,30 @@ class DirectLLMKernel implements PiKernel {
     }));
 
     let fullText = "";
-    const stream = client.messages.stream({
+    let thinkingText = "";
+    const streamParams: Record<string, unknown> = {
       model: this.config.model,
       max_tokens: 4096,
       system: systemPrompt || undefined,
       messages: apiMessages,
-    });
+    };
+    if (this.config.thinking) {
+      streamParams.thinking = this.config.thinking;
+    }
+    const stream = client.messages.stream(
+      streamParams as Parameters<typeof client.messages.stream>[0],
+    );
 
     for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        fullText += event.delta.text;
-        yield { type: "text_delta", text: fullText };
+      if (event.type === "content_block_delta") {
+        if (event.delta.type === "thinking_delta") {
+          thinkingText += (event.delta as { type: "thinking_delta"; thinking: string }).thinking;
+          yield { type: "thinking_delta", text: thinkingText };
+        }
+        if (event.delta.type === "text_delta") {
+          fullText += event.delta.text;
+          yield { type: "text_delta", text: fullText };
+        }
       }
     }
 
@@ -116,6 +133,7 @@ class DirectLLMKernel implements PiKernel {
     systemPrompt: string,
     tools: ToolDef[],
     onText?: (text: string) => void,
+    onThinking?: (text: string) => void,
   ): Promise<LLMResponse> {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({
@@ -129,10 +147,11 @@ class DirectLLMKernel implements PiKernel {
     }));
 
     let text = "";
-    const toolCalls: { id: string; name: string; input: string }[] = [];
+    let thinkingText = "";
+    const toolCalls: { id: string; name: string; input: Record<string, unknown> }[] = [];
     let currentTool: { id: string; name: string; input: string } | null = null;
 
-    const stream = client.messages.stream({
+    const streamParams: Record<string, unknown> = {
       model: this.config.model,
       max_tokens: 4096,
       system: systemPrompt,
@@ -140,9 +159,15 @@ class DirectLLMKernel implements PiKernel {
       tools: tools.map((t) => ({
         name: t.name,
         description: t.description,
-        input_schema: t.input_schema,
+        input_schema: { type: "object" as const, ...t.input_schema },
       })),
-    });
+    };
+    if (this.config.thinking) {
+      streamParams.thinking = this.config.thinking;
+    }
+    const stream = client.messages.stream(
+      streamParams as Parameters<typeof client.messages.stream>[0],
+    );
 
     for await (const event of stream) {
       if (event.type === "content_block_start") {
@@ -155,6 +180,10 @@ class DirectLLMKernel implements PiKernel {
         }
       }
       if (event.type === "content_block_delta") {
+        if (event.delta.type === "thinking_delta") {
+          thinkingText += (event.delta as { type: "thinking_delta"; thinking: string }).thinking;
+          onThinking?.(thinkingText);
+        }
         if (event.delta.type === "text_delta") {
           text += event.delta.text;
           onText?.(text);
