@@ -314,7 +314,7 @@ Open boundaries
   // ── 加载用户自定义系统提示词（每次调用读取） ─────────
   try {
     const userDir = dirname(artifactDir);
-    const promptPath = join(userDir, "l1-system-prompt.md");
+    const promptPath = join(userDir, "CRAFT.md");
     const userPrompt = (await readFile(promptPath, "utf-8")).trim();
     if (userPrompt) {
       prompt += `---\n\n## 用户自定义指令\n> 以下内容为用户配置内容，为最高优先级参考内容。\n\n${userPrompt}\n`;
