@@ -293,19 +293,22 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
 
   // ── 加载 SOUL.md / USER.md（创建时读取一次） ──────────
   const userDir = join(workspaceDir, user);
-  let soulPrompt = "";
-  try {
-    soulPrompt = readFileSync(join(userDir, "SOUL.md"), "utf-8").trim();
-  } catch {
-    // SOUL.md 不存在 → 使用默认灵魂
-  }
 
-  let userPrompt = "";
-  try {
-    userPrompt = readFileSync(join(userDir, "USER.md"), "utf-8").trim();
-  } catch {
-    // USER.md 不存在 → 无用户特征
-  }
+  const loadPromptFile = (filename: string): string => {
+    try {
+      const raw = readFileSync(join(userDir, filename), "utf-8");
+      const marker = "<!-- prompt -->";
+      const idx = raw.indexOf(marker);
+      return idx >= 0
+        ? raw.slice(idx + marker.length).trim()
+        : raw.trim();
+    } catch {
+      return "";
+    }
+  };
+
+  const soulPrompt = loadPromptFile("SOUL.md");
+  const userPrompt = loadPromptFile("USER.md");
 
   return {
     async run(request: string, priorMessages?: ChatMessage[]) {

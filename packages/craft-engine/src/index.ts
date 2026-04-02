@@ -311,13 +311,20 @@ Open boundaries
     prompt += `当前内容已在下方用户消息中提供，直接基于它修改即可。\n\n`;
   }
 
-  // ── 加载用户自定义系统提示词（每次调用读取） ─────────
+  // ── 加载 CRAFT.md（每次调用读取） ─────────────────────
   try {
     const userDir = dirname(artifactDir);
     const promptPath = join(userDir, "CRAFT.md");
-    const userPrompt = (await readFile(promptPath, "utf-8")).trim();
-    if (userPrompt) {
-      prompt += `---\n\n## 用户自定义指令\n> 以下内容为用户配置内容，为最高优先级参考内容。\n\n${userPrompt}\n`;
+    const raw = (await readFile(promptPath, "utf-8")).trim();
+    if (raw) {
+      const marker = "<!-- prompt -->";
+      const idx = raw.indexOf(marker);
+      const userPrompt = idx >= 0
+        ? raw.slice(idx + marker.length).trim()
+        : raw;
+      if (userPrompt) {
+        prompt += `---\n\n## 用户自定义指令\n> 以下内容为用户配置内容，为最高优先级参考内容。\n\n${userPrompt}\n`;
+      }
     }
   } catch {
     // 文件不存在 → 无自定义提示词
