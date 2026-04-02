@@ -1145,7 +1145,106 @@ TUI 只是帮助人类参与和验收这个机制的入口，
 
 ---
 
-# 23. 最终约束
+# 23. Capability Declaration 与 Runtime Authorization
+
+## 23.1 概念：Capability Declaration
+
+在当前阶段，Artifact 可表达完成其执行路径所需的最小 capabilities。
+这是一种**能力需求声明**，不是最终权限授予。
+
+其目的只有一个：
+> 让 L0 在执行当前 Artifact 时，明确"完成这件事最少需要什么工具能力"。
+
+Capability Declaration 属于 Artifact 的执行面信息，而不是 Skill 的广义能力描述。
+
+## 23.2 Artifact 中的表达方式
+
+### Body 中新增固定区块
+
+```yaml
+## Capabilities
+- fs.read
+- fs.write.workspace
+```
+
+语义：
+- 表示完成当前 Execution 所需的最小 capabilities
+- 不代表这些 capabilities 已自动授予
+- L0 的实际可用能力，以 Runtime 最终授予结果为准
+
+### Header 中的轻量摘要（可选）
+
+若需要让 L0 在只读 header 时就做更快判断，可在注入给 L0 的 Artifact header 中增加轻量摘要：
+
+```yaml
+required_capabilities:
+  - fs.read
+  - fs.write.workspace
+```
+
+注意：
+- 这只是轻量摘要，不是完整协议对象
+- Header 不应膨胀成复杂协议对象
+- Header 仍然只服务于 L0 的低成本判断
+
+## 23.3 L1 的职责边界
+
+L1 在 crafting 时可以：
+- 为 Artifact 注入完成当前执行路径所需的最小 capabilities
+- 若采用邻接式前瞻扩展，也可补入覆盖"紧邻下一步"所需的最小 capabilities
+
+L1 不可以：
+- 把 capability declaration 当作最终授权
+- 为遥远未来场景预装工具
+- 把通用工具包整体塞进 Artifact
+- 越过 Runtime 直接授予权限
+
+## 23.4 邻接式前瞻扩展的边界
+
+为减少重复 crafting，L1 允许"向前多想一步"，但只限于：
+- 与当前请求同类的高概率下一步行为
+- 能由当前请求、已知 facts、现有执行路径直接推得
+- 不引入新的核心协议、全新任务类型或重型治理对象
+
+若超出以上边界，则不应前瞻扩展。
+
+## 23.5 Runtime Authorization（预留）
+
+当前阶段不实现完整权限配置系统。Runtime 只需预留一个最小授权判断接口。
+
+推荐语义：
+
+```
+authorizeCapabilities(requestedCapabilities, context) => grantedCapabilities
+```
+
+规则：
+- Artifact 声明 `requestedCapabilities`
+- Runtime 返回 `grantedCapabilities`
+- L0 实际可用能力 = `requestedCapabilities ∩ grantedCapabilities`
+- 若完成当前执行路径所需能力未被授予，则 L0 直接升级给 L1
+
+这样可保证：
+- Artifact 仍是执行面，而不是权限系统
+- L1 仍是能力工程层，而不是授权中心
+- Runtime 保留最终系统控制点
+
+## 23.6 Escalate when 中允许显式写出能力缺口
+
+Artifact 的 `Escalate when` 应允许出现能力缺口，例如：
+
+```yaml
+## Escalate when
+- 当前 Runtime 未授予 fs.write.workspace
+- 需要 shell.local.safe 才能继续
+- 需要 search.web 才能继续
+```
+
+能力缺口被纳入现有统一的升级语义，不需要新增独立子系统。
+
+---
+
+# 24. 最终约束
 
 这份 SPEC 是当前阶段的唯一主规范。
 

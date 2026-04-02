@@ -16,8 +16,10 @@
  * - 通过 SessionRecorder 记录每轮对话（即时 append JSONL）
  */
 
-import { writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { writeFile, mkdir, readFile, readdir, stat } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { exec } from "node:child_process";
 import yaml from "js-yaml";
 import type { Artifact, Upgrade, RunRecord, TuiEvent } from "@ethan-computer/protocol-types";
 import type { ArtifactRegistry, ArtifactSummary } from "@ethan-computer/artifact-registry";
@@ -59,20 +61,108 @@ const L0_TOOLS: ToolDef[] = [
       required: ["reason"],
     },
   },
+  {
+    name: "read_file",
+    description: "读取指定路径的文件内容。",
+    input_schema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "文件路径（绝对或相对路径）" },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "write_file",
+    description: "将内容写入指定路径的文件。如果目录不存在会自动创建。",
+    input_schema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "文件路径（绝对或相对路径）" },
+        content: { type: "string", description: "要写入的文件内容" },
+      },
+      required: ["path", "content"],
+    },
+  },
+  {
+    name: "edit_file",
+    description: "对已有文件做定点修改。用 old_string 匹配要替换的内容，用 new_string 替换。必须精确匹配文件中的一段内容。",
+    input_schema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "文件路径（绝对或相对路径）" },
+        old_string: { type: "string", description: "要替换的原文本（必须精确匹配）" },
+        new_string: { type: "string", description: "替换后的新文本" },
+      },
+      required: ["path", "old_string", "new_string"],
+    },
+  },
+  {
+    name: "list_directory",
+    description: "列出指定目录下的文件和子目录。",
+    input_schema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "目录路径（绝对或相对路径）" },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "run_command",
+    description: "执行 shell 命令并返回输出。用于构建、测试、运行脚本等操作。",
+    input_schema: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "要执行的 shell 命令" },
+        timeout: { type: "number", description: "超时时间（毫秒），默认 30000" },
+      },
+      required: ["command"],
+    },
+  },
 ];
 
 // ── System Prompt 构造 ──────────────────────────────────────
 
-function buildL0SystemPrompt(summaries: ArtifactSummary[]): string {
-  let prompt = `你是 Ethan Computer 的 L0 执行层。你是一个 agent，拥有工具调用能力，负责处理用户请求。
+function buildL0SystemPrompt(summaries: ArtifactSummary[], userPrompt?: string): string {
+  let prompt = `你是 Ethan Computer 的 L0 执行层。
+你是用户可见的执行 agent。
+你只基于当前可用的 Artifact 执行，不直接回溯 Skill，不自行做广义能力工程。
 
-## 工作方式
+## 唯一职责
 
-1. 查看下方可用 Artifact 列表
-2. 如果某个 Artifact 的 when_to_use 匹配当前请求 → 调用 load_artifact 加载全文
-3. 根据 Artifact 内容直接回应用户（自然语言，不提及内部机制）
-4. 如果没有匹配的 Artifact → 调用 escalate 并说明原因
-5. 回复用户时简洁、有用、直接
+优先使用已有 Artifact 完成当前请求；
+若现有 Artifact 不足，则升级给 L1；
+L1 返回后，继续执行。
+
+## 决策规则
+
+对每个候选 Artifact，只判断以下四件事：
+
+1. 当前请求的核心意图，是否落在该 Artifact 的 \`When to use\` 范围内
+2. 该 Artifact 的 \`Execution\` 是否足以直接指导本次任务
+3. 当前请求是否命中该 Artifact 的 \`Escalate when\`
+4. 完成当前执行路径所需的 capabilities，是否已被该 Artifact 声明且被 Runtime 授予
+
+决策方式：
+- 四项都满足 → 直接执行
+- 任一明确不满足 → 升级给 L1
+- 判断模糊 → 优先尝试执行；若执行后仍存在边界不清，在最终回复末尾用一句话标注边界，不解释内部机制
+
+## 能力边界
+
+- 你只能使用当前 Artifact 已声明且 Runtime 已授予的 capabilities
+- 你不能自行扩权
+- 如果完成当前执行路径需要超出当前范围的能力，直接升级给 L1
+- 如果 Runtime 未授予某项必要 capability，直接升级给 L1，不假装完成
+
+## 执行流程
+
+1. 读取当前注入的 Artifact headers
+2. 决定直接执行某个 Artifact，或升级给 L1
+3. 若升级，则把以下信息传给 L1：用户当前请求、当前尝试依赖的 Artifact（如有）、当前为什么不足、已知 facts
+4. L1 返回后，重新读取更新后的 Artifact，并继续执行
+5. 写入本次运行记录
 
 ## 当前可用的 Artifact
 
@@ -90,13 +180,25 @@ function buildL0SystemPrompt(summaries: ArtifactSummary[]): string {
     });
   }
 
-  prompt += `## 规则
+  prompt += `## 面向用户的输出规范
 
-- 优先使用已有的 Artifact，不要尝试自己回答超出 Artifact 范围的问题
-- 加载 Artifact 后，根据其内容生成有用的回复
-- 如果 Artifact 不够，调用 escalate
-- 不要在回复中提及 Artifact、执行步骤、L0/L1 等内部机制
+- 直接给出有用结果
+- 不解释内部机制
+- 不提及 Artifact、Skill、L0、L1、upgrade、craft、runtime 等系统词
+- 不伪造执行结果
+- 若本次执行存在边界模糊，可在回复末尾用一句话标注，不展开解释
+
+## 降级规则
+
+如果当前无可用 Artifact，且无法直接完成请求：
+- 立即升级给 L1
+- 不要越权执行
+- 不要伪造结果
 `;
+
+  if (userPrompt) {
+    prompt += `\n---\n\n## 用户自定义指令\n> 以下内容为用户配置内容，为最高优先级参考内容。\n\n${userPrompt}\n`;
+  }
 
   return prompt;
 }
@@ -146,6 +248,7 @@ export type EnterResult = EnterSuccess | EnterEscalate;
 
 export interface EnterRuntimeConfig {
   user: string;
+  workspaceDir: string;
   runsDir: string;
   sessionsDir: string;
   artifactRegistry: ArtifactRegistry;
@@ -161,11 +264,20 @@ export interface EnterRuntime {
 }
 
 export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
-  const { user, runsDir, sessionsDir, artifactRegistry, kernel, craftEngine, onEvent } = config;
+  const { user, workspaceDir, runsDir, sessionsDir, artifactRegistry, kernel, craftEngine, onEvent } = config;
   const maxEscalations = craftEngine ? (config.maxEscalations ?? 1) : 0;
   const maxIterations = config.maxIterations ?? 10;
 
   const emit = (event: TuiEvent) => onEvent?.(event);
+
+  // ── 加载用户自定义系统提示词（创建时读取一次） ─────────
+  let userPrompt = "";
+  try {
+    const promptPath = join(workspaceDir, user, "l0-system-prompt.md");
+    userPrompt = readFileSync(promptPath, "utf-8").trim();
+  } catch {
+    // 文件不存在 → 无自定义提示词
+  }
 
   return {
     async run(request: string, priorMessages?: ChatMessage[]) {
@@ -206,7 +318,7 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
 
       // ── Agent Loop ─────────────────────────────────────
       for (let i = 0; i < maxIterations; i++) {
-        const systemPrompt = buildL0SystemPrompt(summaries);
+        const systemPrompt = buildL0SystemPrompt(summaries, userPrompt);
 
         const response = await kernel.callWithTools(
           messages, systemPrompt, L0_TOOLS,
@@ -431,6 +543,84 @@ async function executeL0Tool(
         craftApplied: true,
         craftInfo: { report: craftResult.report, artifact_path: craftResult.artifact_path },
       };
+    }
+
+    case "read_file": {
+      const filePath = String(input.path);
+      try {
+        const content = await readFile(filePath, "utf-8");
+        const lines = content.split("\n").length;
+        return { content, summary: `read ${filePath} (${lines} lines)` };
+      } catch (err: any) {
+        return { content: `Error reading file: ${err.message}`, summary: `read error: ${filePath}`, isError: true };
+      }
+    }
+
+    case "write_file": {
+      const filePath = String(input.path);
+      const content = String(input.content);
+      try {
+        const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+        await mkdir(dir, { recursive: true });
+        await writeFile(filePath, content, "utf-8");
+        return { content: `文件已写入: ${filePath}`, summary: `wrote ${filePath}` };
+      } catch (err: any) {
+        return { content: `Error writing file: ${err.message}`, summary: `write error: ${filePath}`, isError: true };
+      }
+    }
+
+    case "edit_file": {
+      const filePath = String(input.path);
+      const oldStr = String(input.old_string);
+      const newStr = String(input.new_string);
+      try {
+        const content = await readFile(filePath, "utf-8");
+        if (!content.includes(oldStr)) {
+          return { content: `Error: old_string not found in ${filePath}`, summary: `edit miss: ${filePath}`, isError: true };
+        }
+        const newContent = content.replace(oldStr, newStr);
+        await writeFile(filePath, newContent, "utf-8");
+        return { content: `文件已修改: ${filePath}`, summary: `edited ${filePath}` };
+      } catch (err: any) {
+        return { content: `Error editing file: ${err.message}`, summary: `edit error: ${filePath}`, isError: true };
+      }
+    }
+
+    case "list_directory": {
+      const dirPath = String(input.path);
+      try {
+        const entries = await readdir(dirPath);
+        const results: string[] = [];
+        for (const entry of entries) {
+          const fullPath = join(dirPath, entry);
+          const s = await stat(fullPath);
+          results.push(s.isDirectory() ? `${entry}/` : entry);
+        }
+        const content = results.join("\n") || "（空目录）";
+        return { content, summary: `listed ${dirPath} (${results.length} entries)` };
+      } catch (err: any) {
+        return { content: `Error listing directory: ${err.message}`, summary: `list error: ${dirPath}`, isError: true };
+      }
+    }
+
+    case "run_command": {
+      const cmd = String(input.command);
+      const timeout = Number(input.timeout) || 30000;
+      try {
+        const result = await new Promise<{ stdout: string; stderr: string; code: number }>((resolve, reject) => {
+          exec(cmd, { timeout }, (error, stdout, stderr) => {
+            resolve({ stdout, stderr, code: error ? (error as any).code ?? 1 : 0 });
+          });
+        });
+        const output = [
+          `Exit code: ${result.code}`,
+          result.stdout ? `stdout:\n${result.stdout}` : "",
+          result.stderr ? `stderr:\n${result.stderr}` : "",
+        ].filter(Boolean).join("\n");
+        return { content: output, summary: `ran: ${cmd.substring(0, 50)} (exit ${result.code})` };
+      } catch (err: any) {
+        return { content: `Error running command: ${err.message}`, summary: `cmd error: ${cmd.substring(0, 30)}`, isError: true };
+      }
     }
 
     default:

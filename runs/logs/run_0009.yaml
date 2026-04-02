@@ -1,0 +1,6 @@
+run_id: run_0009
+request: 查询天气
+used_artifact: weather-query-placeholder
+escalated: false
+craft_applied: false
+result: success

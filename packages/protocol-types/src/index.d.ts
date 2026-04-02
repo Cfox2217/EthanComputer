@@ -16,10 +16,12 @@ export interface ArtifactHeader {
     when_to_use: string[];
     derived_from: string;
     escalate_when: string[];
+    required_capabilities?: string[];
 }
 export interface ArtifactBody {
     user_facts: Record<string, unknown>;
     execution: string[];
+    capabilities: string[];
     escalate_when: string[];
 }
 export interface Artifact {

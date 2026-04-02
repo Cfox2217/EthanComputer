@@ -97,6 +97,7 @@ async function main() {
 
       const runtime = createEnterRuntime({
         user: "ethan",
+        workspaceDir: join(ROOT, "Workspace"),
         runsDir: join(ROOT, "runs"),
         sessionsDir,
         artifactRegistry,

@@ -73,6 +73,7 @@
 - Skill 市场、远程同步等
 
 ## Tech Debt
+- **权限管理系统（Capability Authorization）**：当前 L0 被授予完全权限（read/write/edit/list/command），无任何约束。需要：(1) Runtime 授权接口 `authorizeCapabilities()`；(2) L0 执行时 capability 未授予 → 中断执行、弹出权限申请 UI；(3) 用户在 TUI 中审批/拒绝临时权限请求；(4) 权限持久化与复用。当前 MVP 阶段先授完全权限，优先验证分层与成长机制。后续先实现最小 Runtime 授权判断（硬编码白名单），再逐步引入交互式权限申请 UI。
 - GUI 后期直接借鉴 Reference/craft-agents-oss-main 前端
 - craft-engine: 无对应 Skill 场景当前未处理（agent 自行决策），后续需评估是否需要显式 fallback
 - craft-engine: agentic loop 无 token 用量统计，后续需加
@@ -88,6 +89,43 @@
 - **补充参考**: `Reference/openclaw-main/`（全面但复杂）
 
 ## Log
+### [2026-04-02 17:00 GMT+08:00] 提示词系统最终版重写 + Capability Declaration
+- **Why**: 压缩提示词为真正的运行时契约；引入 capability declaration 和邻接式前瞻原则
+- **Changed**:
+  - `SYSTEM_PROMPTS.md`: 完整重写为最终版。L0 四条件决策核（when_to_use + execution + escalate_when + capabilities）；L1 三种动作（extend/create/block）+ 四项生成原则（最小可用 + 邻接式前瞻 + 能力声明 + 边界显式化）；Artifact 格式新增 Capabilities/Known facts/Notes；Craft Report 新增 Forward coverage
+  - `HANDLE_SPEC.md`: 新增 §23 Capability Declaration 与 Runtime Authorization（能力声明概念、Artifact 表达方式、L1 职责边界、邻接式前瞻约束、Runtime 授权预留接口、Escalate when 能力缺口）
+  - `packages/enter-runtime/src/index.ts`: `buildL0SystemPrompt` 重写为四条件决策核 + 能力边界 + 降级规则
+  - `packages/craft-engine/src/index.ts`: `buildL1SystemPrompt` 重写为三种动作 + 四项生成原则 + 新 Artifact 格式 + 占位 Artifact + 新 Craft Report 格式
+  - `packages/protocol-types/src/index.d.ts`: `ArtifactHeader` 新增 `required_capabilities`（可选）；`ArtifactBody` 新增 `capabilities`
+- **Architecture**: 无架构边界变更。新增 capability declaration 为声明式（不是授权式），Runtime 预留最小授权接口
+- **Validated**: protocol-types + craft-engine + enter-runtime tsc --noEmit 全部通过
+- **Next**: 实际运行验证；Runtime 授权接口实现；Phase 5 Run Record & Replay
+
+### [2026-04-02 16:00 GMT+08:00] 优化 L0/L1 系统提示词
+- **Why**: 提示词判断依据不够清晰、成长信号不显性、失败处理不够健壮
+- **Changed**:
+  - L0: "工作方式" → "判断原则 + 执行步骤"两段式（三条判断标准 + 明确 escalate 条件）
+  - L0: "规则" → 拆分为"面向用户的输出规范"+"降级策略"
+  - L1: "你的目标"优先级列表 → 四步决策流程（判断起点→可扩展判断→基于 Skill 新建→Skill 不足）
+  - L1: "工作顺序"第2步后追加"可扩展"判断标准（同类任务 vs 不同类型）
+  - L1: Craft 报告格式新增 `growth_signal` 字段（系统成长可读证据）
+  - L1: "你不能"后新增"降级策略" section（占位 Artifact 模板 + blocked 状态）
+  - 同步更新 `SYSTEM_PROMPTS.md` 模板和代码中的 `buildL0SystemPrompt` / `buildL1SystemPrompt`
+- **Architecture**: 无架构变更，仅提示词内容优化
+- **Validated**: enter-runtime + craft-engine tsc --noEmit 编译通过
+- **Next**: 实际运行验证；Phase 5 Run Record & Replay
+
+### [2026-04-02 15:00 GMT+08:00] 开放 L0/L1 用户自定义系统提示词接口
+- **Why**: 支持用户通过 MD 文件自定义 L0 和 L1 的系统提示词，实现热插拔（修改即时生效）
+- **Changed**:
+  - 新增 `Workspace/Ethan/l0-system-prompt.md` 和 `Workspace/Ethan/l1-system-prompt.md`
+  - `packages/enter-runtime`: config 新增 `workspaceDir` 参数；`createEnterRuntime` 时同步读取 `l0-system-prompt.md`（仅一次），追加到 `buildL0SystemPrompt` 末尾
+  - `packages/craft-engine`: `buildL1SystemPrompt` 改为 async，每次调用时异步读取 `l1-system-prompt.md` 并追加到末尾
+  - `scripts/run-mvp.ts`: 传入 `workspaceDir`
+- **Architecture**: L0 创建时读取一次（会话级稳定），L1 每次 craft 调用都读取（实例级销毁重建）。文件不存在时静默跳过。前缀标记为"用户自定义指令，最高优先级参考内容"
+- **Validated**: enter-runtime + craft-engine tsc --noEmit 编译通过
+- **Next**: Phase 5 Run Record & Replay
+
 ### [2026-04-01 18:30 GMT+08:00] TUI 视觉统一 + 文档规范 + 对话上下文修复
 - **Why**: TUI 显示不统一——回复前缀会跳变、间距不一致、不同阶段样式混乱；L0 回复未加入后续对话上下文
 - **Changed**:
