@@ -124,12 +124,30 @@ const L0_TOOLS: ToolDef[] = [
 
 // ── System Prompt 构造 ──────────────────────────────────────
 
-function buildL0SystemPrompt(summaries: ArtifactSummary[], userPrompt?: string): string {
-  let prompt = `你是 Ethan Computer 的 L0 执行层。
-你是用户可见的执行 agent。
-你只基于当前可用的 Artifact 执行，不直接回溯 Skill，不自行做广义能力工程。
+/**
+ * L0 系统提示词注入优先级（从高到低）：
+ *
+ * P1 — SOUL.md（Agent 灵魂/身份定义）
+ * P2 — 系统核心规则（决策规则、能力边界、执行流程）
+ * P3 — USER.md（用户特征/偏好）
+ * P4 — Artifact headers（动态注入）
+ * P5 — 输出规范 + 降级规则
+ */
 
-## 唯一职责
+function buildL0SystemPrompt(
+  summaries: ArtifactSummary[],
+  soulPrompt: string,
+  userPrompt: string,
+): string {
+  let prompt = "";
+
+  // ── P1: Agent 灵魂（最高优先级） ───────────────────────
+  if (soulPrompt) {
+    prompt += `${soulPrompt}\n\n---\n\n`;
+  }
+
+  // ── P2: 系统核心规则 ─────────────────────────────────
+  prompt += `## 唯一职责
 
 优先使用已有 Artifact 完成当前请求；
 若现有 Artifact 不足，则升级给 L1；
@@ -164,9 +182,15 @@ L1 返回后，继续执行。
 4. L1 返回后，重新读取更新后的 Artifact，并继续执行
 5. 写入本次运行记录
 
-## 当前可用的 Artifact
-
 `;
+
+  // ── P3: 用户特征 ─────────────────────────────────────
+  if (userPrompt) {
+    prompt += `---\n\n## 用户特征\n\n${userPrompt}\n\n`;
+  }
+
+  // ── P4: Artifact headers（动态注入） ──────────────────
+  prompt += `---\n\n## 当前可用的 Artifact\n\n`;
 
   if (summaries.length === 0) {
     prompt += `（暂无可用 Artifact — 如果无法直接回答，请 escalate）\n`;
@@ -180,7 +204,8 @@ L1 返回后，继续执行。
     });
   }
 
-  prompt += `## 面向用户的输出规范
+  // ── P5: 输出规范 + 降级规则 ───────────────────────────
+  prompt += `---\n\n## 面向用户的输出规范
 
 - 直接给出有用结果
 - 不解释内部机制
@@ -195,10 +220,6 @@ L1 返回后，继续执行。
 - 不要越权执行
 - 不要伪造结果
 `;
-
-  if (userPrompt) {
-    prompt += `\n---\n\n## 用户自定义指令\n> 以下内容为用户配置内容，为最高优先级参考内容。\n\n${userPrompt}\n`;
-  }
 
   return prompt;
 }
@@ -270,13 +291,20 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
 
   const emit = (event: TuiEvent) => onEvent?.(event);
 
-  // ── 加载用户自定义系统提示词（创建时读取一次） ─────────
+  // ── 加载 SOUL.md / USER.md（创建时读取一次） ──────────
+  const userDir = join(workspaceDir, user);
+  let soulPrompt = "";
+  try {
+    soulPrompt = readFileSync(join(userDir, "SOUL.md"), "utf-8").trim();
+  } catch {
+    // SOUL.md 不存在 → 使用默认灵魂
+  }
+
   let userPrompt = "";
   try {
-    const promptPath = join(workspaceDir, user, "l0-system-prompt.md");
-    userPrompt = readFileSync(promptPath, "utf-8").trim();
+    userPrompt = readFileSync(join(userDir, "USER.md"), "utf-8").trim();
   } catch {
-    // 文件不存在 → 无自定义提示词
+    // USER.md 不存在 → 无用户特征
   }
 
   return {
@@ -318,7 +346,7 @@ export function createEnterRuntime(config: EnterRuntimeConfig): EnterRuntime {
 
       // ── Agent Loop ─────────────────────────────────────
       for (let i = 0; i < maxIterations; i++) {
-        const systemPrompt = buildL0SystemPrompt(summaries, userPrompt);
+        const systemPrompt = buildL0SystemPrompt(summaries, soulPrompt, userPrompt);
 
         const response = await kernel.callWithTools(
           messages, systemPrompt, L0_TOOLS,

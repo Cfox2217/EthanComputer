@@ -89,6 +89,19 @@
 - **补充参考**: `Reference/openclaw-main/`（全面但复杂）
 
 ## Log
+### [2026-04-02 18:00 GMT+08:00] L0 提示词注入系统重构：SOUL.md + USER.md
+- **Why**: 原 l0-system-prompt.md 是单文件注入，无法区分 agent 灵魂与用户特征；需要更清晰的分层注入机制
+- **Changed**:
+  - 新增 `Workspace/Ethan/SOUL.md`（agent 灵魂/身份定义，最高优先级）
+  - 新增 `Workspace/Ethan/USER.md`（用户特征/偏好，P3 优先级）
+  - 删除旧 `Workspace/Ethan/l0-system-prompt.md`
+  - `buildL0SystemPrompt` 重构为五级注入：P1 SOUL → P2 核心规则 → P3 USER → P4 Artifact headers → P5 输出规范
+  - `createEnterRuntime` 改为读取 SOUL.md + USER.md，替代原 l0-system-prompt.md
+  - L0 工具集扩展：新增 read_file / write_file / edit_file / list_directory / run_command（完全权限）
+- **Architecture**: 注入优先级明确：SOUL > 系统规则 > USER > Artifacts > 输出规范。SOUL 和 USER 都是文件级热插拔，修改即时生效
+- **Validated**: enter-runtime + craft-engine tsc --noEmit 编译通过
+- **Next**: 实际运行验证；L1 提示词注入系统类似重构
+
 ### [2026-04-02 17:00 GMT+08:00] 提示词系统最终版重写 + Capability Declaration
 - **Why**: 压缩提示词为真正的运行时契约；引入 capability declaration 和邻接式前瞻原则
 - **Changed**:
