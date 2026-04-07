@@ -37,3 +37,13 @@ htmlcov/
 
 # MyPy
 .mypy_cache/
+
+# Runtime data
+data/profiles/*.yaml
+data/artifacts/*/
+
+# Reference source (large)
+Reference/
+
+# ADK agent config (generated)
+.agent/
