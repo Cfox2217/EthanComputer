@@ -277,8 +277,7 @@ docs(adr): 记录 enter 不直接读取 skill
 ## 15. 参考项目-OpenClaw
 
 遇到架构决策或实现细节疑问时，先查参考项目源码。
-- 路径：`Reference/openclaw-main/`
-- 作为架构模式和标准实践的补充来源
+- 暂未引入参考项目
 
 ---
 
@@ -299,3 +298,106 @@ docs(adr): 记录 enter 不直接读取 skill
 > 你的职责不是把代码"先写出来"，而是在不破坏长期演化能力的前提下，交付小步、清晰、可验证、可追溯、可接续的改动。
 
 > 任何真实工程动作，都必须留下足够的解释与状态记录，让下一次开发可以接得上，而不是重新猜。
+
+---
+
+## 18. mempal 记忆系统集成
+
+本项目使用 mempal 作为跨会话记忆系统。mempal 的核心原则是：**存储一切，让结构使检索高效。** 不做摘要、不判断"什么值得记"——原样存储，按需检索。
+
+### 18.1 核心概念
+
+- **wing**：顶层作用域，对应一个项目（本项目 = `EthanComputer`）
+- **room**：子作用域，通常从目录名推断（如 `ethan_computer`、`tools`）
+- **drawer**：一条存储的记忆/知识块
+- **taxonomy**：可编辑的路由关键词，决定搜索时查询被路由到哪个 room
+
+### 18.2 日常工作流
+
+#### 会话开始
+```bash
+# 刷新上下文：了解当前记忆状态
+mempal status
+mempal wake-up
+```
+
+#### 搜索记忆
+```bash
+# 始终指定 --wing 缩小范围
+mempal search "auth decision" --wing EthanComputer
+
+# 精确到 room
+mempal search "session init callback" --wing EthanComputer --room ethan_computer
+
+# 非英文查询先翻译为英文（嵌入模型以英语为中心）
+# 差：mempal search "双 Agent 架构"
+# 好：mempal search "dual agent architecture"
+```
+
+#### 记录决策（通过 CLI）
+```bash
+# 记录重要决策、设计选择、教训
+mempal compress "选择 SQLite 而非 ChromaDB，因为单文件可移植性和零外部依赖"
+
+# 搜索决策记录
+mempal search "database choice" --wing EthanComputer
+```
+
+#### Agent 日记（跨会话行为学习）
+```bash
+# 写入行为观察/教训/模式（约定：wing="agent-diary"）
+# 使用标准化前缀：OBSERVATION: / LESSON: / PATTERN:
+
+# 查询日记
+mempal search "lesson" --wing agent-diary --room claude
+```
+
+### 18.3 MEMORY_PROTOCOL 规则
+
+以下规则源自 mempal 的自描述协议，每次会话必须遵循：
+
+1. **会话开始调 status**（Rule 0）：先了解有哪些 wing、多少 drawer，不盲猜。
+2. **断言前先查证**（Rule 2）：涉及项目事实时，先 `mempal search` 确认，不凭记忆猜测。
+3. **历史问题先检索**（Rule 3）：用户问"为什么选了 X"时，搜索决策记录而非凭泛泛知识回答。
+4. **查询翻译为英文**（Rule 3a）：嵌入模型以英语为中心，中文查询效果差，先翻译。
+5. **决策后保存**（Rule 4）：每次重要决策后，保存决策内容、推理过程、被排除的方案。
+6. **引用来源**（Rule 5）：回答时引用 drawer_id 和 source_file，区分"有记忆支撑的断言"和"猜测"。
+
+### 18.4 好的决策记录 vs 差的决策记录
+
+**差**（只重复 diff）：
+```
+Added CI workflow
+```
+
+**好**（包含未来 agent 需要的上下文）：
+```
+Added CI with default + all-features matrix. Deliberately omitted rustfmt
+because formatting drift exists in 2 test files — cleanup is a separate
+commit. Follow-up: cargo fmt --all then add fmt check step.
+```
+
+### 18.5 项目维护
+
+```bash
+# 新增源码后重新 ingest
+mempal ingest --wing EthanComputer /Users/ethan/EthanComputer/src
+
+# 清理无用 drawer
+mempal delete <drawer_id>    # 软删除
+mempal purge                  # 永久清除已软删除的
+
+# 优化搜索路由
+mempal taxonomy list
+mempal taxonomy edit EthanComputer ethan_computer --keywords "agent,session,callback"
+```
+
+### 18.6 设计原则备忘
+
+以下原则源自 mempalace-book 的分析，指导记忆系统的使用：
+
+- **结构是廉价的精度来源**：Wing/Room 过滤带来 +34% 检索提升，成本为零
+- **不摘要，不判断"什么重要"**：存储一切，让检索阶段决定
+- **错误记忆比无记忆更危险**：不确定时说"让我查一下"，不要自信地错
+- **搜索时善用过滤器**：`--wing` 和 `--room` 是最有效的精度杠杆
+- **时间是一等公民**：事实会过期，知识图谱支持时间点查询
