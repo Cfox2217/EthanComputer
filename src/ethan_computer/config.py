@@ -12,6 +12,7 @@ class Config(BaseModel):
     user_id: str = "ethan"
     data_dir: Path = Path("./data")
     model_name: str = "gemini-2.5-flash"
+    model_api_base: str = ""
 
     @property
     def profiles_dir(self) -> Path:
@@ -27,8 +28,10 @@ def load_config() -> Config:
     data_dir = os.getenv("ETHAN_DATA_DIR", "./data")
     user_id = os.getenv("ETHAN_USER_ID", "ethan")
     model_name = os.getenv("ETHAN_MODEL_NAME", "gemini-2.5-flash")
+    model_api_base = os.getenv("ETHAN_MODEL_API_BASE", "")
     return Config(
         user_id=user_id,
         data_dir=Path(data_dir),
         model_name=model_name,
+        model_api_base=model_api_base,
     )
